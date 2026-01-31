@@ -1,37 +1,42 @@
 import datetime as dt
-import random
-
 from typing import Optional
 
 from aiogram import F, Router
 from aiogram.enums import ChatMemberStatus
 from aiogram.filters import Command, CommandObject
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, ChatJoinRequest, Message
 
-from app.config import OWNER_ID, SOURCE_CHANNEL_ID
+from app.config import MAX_MOVIES_PER_CODE, OWNER_ID, SOURCE_CHANNEL_ID
 from app.db import (
     add_admin,
     add_channel,
     add_movie,
+    add_join_request,
     add_user,
+    clear_upload_session,
+    count_movies_for_code,
     del_admin,
     del_channel,
     del_movie,
     get_admins,
     get_channels,
     get_day_stats,
-    get_movie,
+    get_movie_items,
+    get_next_code,
     get_recent_days,
+    get_upload_session,
     is_admin,
     get_users,
-    movie_exists,
+    has_join_request,
     record_view,
+    save_upload_session,
 )
 from app.keyboards import (
     admin_back_keyboard,
     admin_panel_keyboard,
     main_keyboard,
     subscribe_keyboard,
+    upload_session_keyboard,
 )
 
 router = Router()
@@ -43,8 +48,12 @@ async def _check_subscriptions(bot, user_id: int, channels: list) -> bool:
         try:
             member = await bot.get_chat_member(chat_id, user_id)
         except Exception:
+            if has_join_request(chat_id, user_id):
+                continue
             return False
         if member.status in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}:
+            if has_join_request(chat_id, user_id):
+                continue
             return False
     return True
 
@@ -81,11 +90,26 @@ def _today() -> str:
 
 
 def _generate_code() -> str:
-    for _ in range(20):
-        code = f"{random.randint(0, 999999):06d}"
-        if not movie_exists(code):
-            return code
-    return f"{random.randint(0, 999999):06d}"
+    return str(get_next_code())
+
+
+def _parse_code(raw: str) -> Optional[str]:
+    value = raw.strip()
+    if not value.isdigit():
+        return None
+    return str(int(value))
+
+
+def _now() -> str:
+    return dt.datetime.utcnow().isoformat()
+
+
+def _extract_media(message: Message) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    if message.video:
+        return message.video.file_id, "video", message.caption
+    if message.document:
+        return message.document.file_id, "document", message.caption
+    return None, None, None
 
 
 @router.message(Command("start"))
@@ -112,10 +136,10 @@ async def help_handler(message: Message):
         "/addadmin <user_id> - admin qo'shish (faqat owner)\n"
         "/deladmin <user_id> - admin chiqarish (faqat owner)\n"
         "/admins - adminlar ro'yxati\n"
-        "/addchannel <@username> - majburiy kanal qo'shish\n"
-        "/delchannel <@username> - kanalni chiqarish\n"
+        "/addchannel <@username|chat_id> [invite_link] - majburiy kanal qo'shish\n"
+        "/delchannel <@username|chat_id> - kanalni chiqarish\n"
         "/channels - kanallar ro'yxati\n"
-        "/addmovie [code] - video/document ustidan reply\n"
+        "/addmovie [code] - kino yuklashni boshlash\n"
         "/delmovie <code> - kino o'chirish\n"
         "/movie <code> - kinoni yuborish\n"
         "/stats - kunlik ko'rishlar\n"
@@ -208,7 +232,8 @@ async def admin_channels_callback(callback: CallbackQuery):
         text = "Kanallar ro'yxati bo'sh."
     else:
         text = "Kanallar:\n" + "\n".join(
-            f"{item.get('title')} (@{item.get('username')})" for item in channels
+            f"{item.get('title')} ({item.get('username') or item.get('chat_id')})"
+            for item in channels
         )
     await callback.message.edit_text(text, reply_markup=admin_back_keyboard())
 
@@ -240,9 +265,9 @@ async def admin_help_callback(callback: CallbackQuery):
         "Admin buyruqlar:\n"
         "/addadmin <user_id>\n"
         "/deladmin <user_id>\n"
-        "/addchannel <@username>\n"
-        "/delchannel <@username>\n"
-        "/addmovie [code] (reply)\n"
+        "/addchannel <@username|chat_id> [invite_link]\n"
+        "/delchannel <@username|chat_id>\n"
+        "/addmovie [code]\n"
         "/delmovie <code>\n"
         "/stats\n"
     )
@@ -255,18 +280,31 @@ async def add_channel_handler(message: Message, command: CommandObject):
         await message.answer("Bu buyruq faqat adminlar uchun.")
         return
     if not command.args:
-        await message.answer("Foydalanish: /addchannel <@username>")
+        await message.answer("Foydalanish: /addchannel <@username|chat_id>")
         return
-    target = command.args.strip()
+    parts = command.args.split()
+    target = parts[0]
+    provided_invite = parts[1] if len(parts) > 1 else ""
     try:
         chat = await message.bot.get_chat(target)
     except Exception:
         await message.answer("Kanal topilmadi.")
         return
+    invite_link = ""
     if not chat.username:
-        await message.answer("Kanalda username bo'lishi kerak.")
-        return
-    add_channel(chat.id, chat.username, chat.title or chat.username)
+        if provided_invite:
+            invite_link = provided_invite
+        else:
+            try:
+                invite = await message.bot.create_chat_invite_link(
+                    chat.id,
+                    creates_join_request=True,
+                )
+                invite_link = invite.invite_link
+            except Exception:
+                await message.answer("Kanal uchun invite link yaratilmayapti.")
+                return
+    add_channel(chat.id, chat.username, chat.title or chat.username or str(chat.id), invite_link)
     await message.answer("Kanal qo'shildi.")
 
 
@@ -276,7 +314,7 @@ async def del_channel_handler(message: Message, command: CommandObject):
         await message.answer("Bu buyruq faqat adminlar uchun.")
         return
     if not command.args:
-        await message.answer("Foydalanish: /delchannel <@username>")
+        await message.answer("Foydalanish: /delchannel <@username|chat_id>")
         return
     target = command.args.strip()
     try:
@@ -298,7 +336,8 @@ async def list_channels_handler(message: Message):
         await message.answer("Kanallar ro'yxati bo'sh.")
         return
     text = "Kanallar:\n" + "\n".join(
-        f"{item.get('title')} (@{item.get('username')})" for item in channels
+        f"{item.get('title')} ({item.get('username') or item.get('chat_id')})"
+        for item in channels
     )
     await message.answer(text)
 
@@ -308,8 +347,26 @@ async def add_movie_handler(message: Message, command: CommandObject):
     if not is_admin(message.from_user.id):
         await message.answer("Bu buyruq faqat adminlar uchun.")
         return
+    if not SOURCE_CHANNEL_ID:
+        await message.answer("SOURCE_CHANNEL_ID sozlanmagan.")
+        return
+    if command.args:
+        code = _parse_code(command.args)
+        if not code:
+            await message.answer("Kod faqat raqam bo'lishi kerak.")
+            return
+    else:
+        code = _generate_code()
+
+    save_upload_session(
+        message.from_user.id,
+        int(code),
+        [],
+        _now(),
+    )
+    await message.answer(f"Kod {code}. Video yuboring.")
+
     if not message.reply_to_message:
-        await message.answer("Video/document ustidan reply qiling.")
         return
 
     reply = message.reply_to_message
@@ -323,29 +380,33 @@ async def add_movie_handler(message: Message, command: CommandObject):
             await message.answer("Bu video ruxsat etilgan kanaldan emas.")
             return
 
-    file_id = None
-    file_type = None
-    caption = reply.caption
-    if reply.video:
-        file_id = reply.video.file_id
-        file_type = "video"
-    elif reply.document:
-        file_id = reply.document.file_id
-        file_type = "document"
+    file_id, file_type, caption = _extract_media(reply)
 
     if not file_id:
         await message.answer("Faqat video yoki document qabul qilinadi.")
         return
 
-    if command.args:
-        code = command.args.strip()
-        if movie_exists(code):
-            await message.answer("Bu kod band. Boshqa kod kiriting.")
-            return
-    else:
-        code = _generate_code()
-    add_movie(code, file_id, file_type, caption or "")
-    await message.answer(f"Kino saqlandi. Kod: {code}")
+    session = get_upload_session(message.from_user.id)
+    if not session:
+        await message.answer("Upload sessiya topilmadi.")
+        return
+    existing = count_movies_for_code(str(session["code"]))
+    if existing + len(session["items"]) >= MAX_MOVIES_PER_CODE:
+        await message.answer("Bu kod uchun limit to'ldi.")
+        return
+    session["items"].append(
+        {"file_id": file_id, "file_type": file_type, "caption": caption or ""}
+    )
+    save_upload_session(
+        message.from_user.id,
+        int(session["code"]),
+        session["items"],
+        session["created_at"],
+    )
+    await message.answer(
+        f"Video qo'shildi. Kod: {session['code']}. Davom etamizmi?",
+        reply_markup=upload_session_keyboard(),
+    )
 
 
 @router.message(Command("delmovie"))
@@ -356,21 +417,34 @@ async def del_movie_handler(message: Message, command: CommandObject):
     if not command.args:
         await message.answer("Foydalanish: /delmovie <code>")
         return
-    code = command.args.strip()
+    code = _parse_code(command.args)
+    if not code:
+        await message.answer("Kod faqat raqam bo'lishi kerak.")
+        return
     del_movie(code)
     await message.answer("Kino o'chirildi.")
 
 
 async def _send_movie(message: Message, code: str) -> bool:
-    movie = get_movie(code)
-    if not movie:
+    items = get_movie_items(code)
+    if not items:
         return False
-    caption = movie.get("caption") or None
-    if movie.get("file_type") == "document":
-        await message.answer_document(movie["file_id"], caption=caption)
-    else:
-        await message.answer_video(movie["file_id"], caption=caption)
-    record_view(_today(), code)
+    for item in items:
+        caption = item.get("caption") or None
+        source_chat_id = item.get("source_chat_id")
+        source_message_id = item.get("source_message_id")
+        if source_chat_id and source_message_id:
+            await message.bot.copy_message(
+                chat_id=message.chat.id,
+                from_chat_id=source_chat_id,
+                message_id=source_message_id,
+            )
+            continue
+        if item.get("file_type") == "document":
+            await message.answer_document(item["file_id"], caption=caption)
+        else:
+            await message.answer_video(item["file_id"], caption=caption)
+    record_view(_today(), str(code))
     return True
 
 
@@ -381,7 +455,10 @@ async def movie_command_handler(message: Message, command: CommandObject):
     if not command.args:
         await message.answer("Foydalanish: /movie <code>")
         return
-    code = command.args.strip()
+    code = _parse_code(command.args)
+    if not code:
+        await message.answer("Kod faqat raqam bo'lishi kerak.")
+        return
     if not await _send_movie(message, code):
         await message.answer("Kino topilmadi.")
 
@@ -390,9 +467,13 @@ async def movie_command_handler(message: Message, command: CommandObject):
 async def movie_text_handler(message: Message):
     if not await ensure_subscribed(message):
         return
-    code = message.text.strip()
-    if code == "Kino kodini yuborish":
+    raw = message.text.strip()
+    if raw == "Kino kodini yuborish":
         await message.answer("Kino kodini yuboring.")
+        return
+    code = _parse_code(raw)
+    if not code:
+        await message.answer("Kino kodi faqat raqam bo'lishi kerak.")
         return
     if not await _send_movie(message, code):
         await message.answer("Kino topilmadi.")
@@ -414,6 +495,116 @@ async def stats_handler(message: Message):
         lines.append("So'nggi kunlar:")
         lines.extend([f"{d}: {c}" for d, c in recent])
     await message.answer("\n".join(lines))
+
+
+@router.chat_join_request()
+async def join_request_handler(join_request: ChatJoinRequest):
+    add_join_request(
+        join_request.chat.id,
+        join_request.from_user.id,
+        _now(),
+    )
+
+
+@router.message((F.video | F.document))
+async def admin_media_handler(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    session = get_upload_session(message.from_user.id)
+    if not session:
+        if not SOURCE_CHANNEL_ID:
+            await message.answer("SOURCE_CHANNEL_ID sozlanmagan.")
+            return
+        code = _generate_code()
+        session = {
+            "code": int(code),
+            "items": [],
+            "created_at": _now(),
+        }
+        save_upload_session(message.from_user.id, int(code), [], session["created_at"])
+    file_id, file_type, caption = _extract_media(message)
+    if not file_id:
+        await message.answer("Faqat video yoki document qabul qilinadi.")
+        return
+    existing = count_movies_for_code(str(session["code"]))
+    if existing + len(session["items"]) >= MAX_MOVIES_PER_CODE:
+        await message.answer("Bu kod uchun limit to'ldi.")
+        return
+    session["items"].append(
+        {"file_id": file_id, "file_type": file_type, "caption": caption or ""}
+    )
+    save_upload_session(
+        message.from_user.id,
+        int(session["code"]),
+        session["items"],
+        session["created_at"],
+    )
+    await message.answer("Video qo'shildi. Davom etamizmi?", reply_markup=upload_session_keyboard())
+
+
+@router.callback_query(F.data == "upload:more")
+async def upload_more_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    session = get_upload_session(callback.from_user.id)
+    if not session:
+        await callback.message.edit_text("Sessiya topilmadi.")
+        return
+    await callback.message.edit_text("Yana video yuboring.")
+
+
+@router.callback_query(F.data == "upload:cancel")
+async def upload_cancel_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    clear_upload_session(callback.from_user.id)
+    await callback.message.edit_text("Upload bekor qilindi.")
+
+
+@router.callback_query(F.data == "upload:commit")
+async def upload_commit_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    session = get_upload_session(callback.from_user.id)
+    if not session:
+        await callback.message.edit_text("Sessiya topilmadi.")
+        return
+    if not SOURCE_CHANNEL_ID:
+        await callback.message.edit_text("SOURCE_CHANNEL_ID sozlanmagan.")
+        return
+    items = session["items"]
+    if not items:
+        await callback.message.edit_text("Hech nima qo'shilmagan.")
+        return
+    existing = count_movies_for_code(str(session["code"]))
+    if existing + len(items) > MAX_MOVIES_PER_CODE:
+        await callback.message.edit_text("Bu kod uchun limit to'ldi.")
+        return
+    added = 0
+    for item in items:
+        caption = item.get("caption") or None
+        if item.get("file_type") == "document":
+            msg = await callback.bot.send_document(
+                SOURCE_CHANNEL_ID, item["file_id"], caption=caption
+            )
+        else:
+            msg = await callback.bot.send_video(
+                SOURCE_CHANNEL_ID, item["file_id"], caption=caption
+            )
+        add_movie(
+            str(session["code"]),
+            item["file_id"],
+            item["file_type"],
+            item.get("caption") or "",
+            source_chat_id=msg.chat.id,
+            source_message_id=msg.message_id,
+        )
+        added += 1
+    clear_upload_session(callback.from_user.id)
+    await callback.message.edit_text(f"Yuklandi. Kod: {session['code']}. Fayllar: {added}")
 
 
 async def _broadcast_to_users(message: Message, text: Optional[str]) -> tuple[int, int]:

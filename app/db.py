@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from typing import Dict, List, Optional, Tuple
@@ -12,7 +13,9 @@ def _connect() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     with _connect() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -26,7 +29,8 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS channels (
                 chat_id INTEGER PRIMARY KEY,
-                username TEXT NOT NULL,
+                username TEXT,
+                invite_link TEXT,
                 title TEXT
             )
             """
@@ -38,6 +42,42 @@ def init_db() -> None:
                 file_id TEXT NOT NULL,
                 file_type TEXT NOT NULL,
                 caption TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS movie_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code INTEGER NOT NULL,
+                file_id TEXT NOT NULL,
+                file_type TEXT NOT NULL,
+                caption TEXT,
+                source_chat_id INTEGER,
+                source_message_id INTEGER
+            )
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_movie_items_code ON movie_items (code)"
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS join_requests (
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                requested_at TEXT NOT NULL,
+                PRIMARY KEY (chat_id, user_id)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS upload_sessions (
+                admin_id INTEGER PRIMARY KEY,
+                code INTEGER NOT NULL,
+                items_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
             )
             """
         )
@@ -58,6 +98,10 @@ def init_db() -> None:
             )
             """
         )
+        _ensure_column(conn, "channels", "invite_link", "TEXT")
+        _ensure_column(conn, "movie_items", "source_chat_id", "INTEGER")
+        _ensure_column(conn, "movie_items", "source_message_id", "INTEGER")
+        _migrate_movies(conn)
         conn.commit()
 
 
@@ -95,11 +139,16 @@ def is_admin(user_id: int) -> bool:
         return cur.fetchone() is not None
 
 
-def add_channel(chat_id: int, username: str, title: str) -> None:
+def add_channel(
+    chat_id: int, username: Optional[str], title: str, invite_link: str
+) -> None:
     with _connect() as conn:
         conn.execute(
-            "INSERT OR REPLACE INTO channels (chat_id, username, title) VALUES (?, ?, ?)",
-            (chat_id, username, title),
+            """
+            INSERT OR REPLACE INTO channels (chat_id, username, invite_link, title)
+            VALUES (?, ?, ?, ?)
+            """,
+            (chat_id, username or "", invite_link, title),
         )
         conn.commit()
 
@@ -112,22 +161,41 @@ def del_channel(chat_id: int) -> None:
 
 def get_channels() -> List[Dict[str, str]]:
     with _connect() as conn:
-        cur = conn.execute("SELECT chat_id, username, title FROM channels")
+        cur = conn.execute("SELECT chat_id, username, invite_link, title FROM channels")
         return [dict(row) for row in cur.fetchall()]
 
 
-def add_movie(code: str, file_id: str, file_type: str, caption: str) -> None:
+def add_movie(
+    code: str,
+    file_id: str,
+    file_type: str,
+    caption: str,
+    source_chat_id: Optional[int] = None,
+    source_message_id: Optional[int] = None,
+) -> None:
     with _connect() as conn:
         conn.execute(
-            "INSERT OR REPLACE INTO movies (code, file_id, file_type, caption) VALUES (?, ?, ?, ?)",
-            (code, file_id, file_type, caption),
+            """
+            INSERT INTO movie_items (
+                code, file_id, file_type, caption, source_chat_id, source_message_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(code),
+                file_id,
+                file_type,
+                caption,
+                source_chat_id,
+                source_message_id,
+            ),
         )
         conn.commit()
 
 
 def del_movie(code: str) -> None:
     with _connect() as conn:
-        conn.execute("DELETE FROM movies WHERE code = ?", (code,))
+        conn.execute("DELETE FROM movie_items WHERE code = ?", (int(code),))
         conn.commit()
 
 
@@ -143,8 +211,37 @@ def get_movie(code: str) -> Optional[Dict[str, str]]:
 
 def movie_exists(code: str) -> bool:
     with _connect() as conn:
-        cur = conn.execute("SELECT 1 FROM movies WHERE code = ?", (code,))
+        cur = conn.execute("SELECT 1 FROM movie_items WHERE code = ?", (int(code),))
         return cur.fetchone() is not None
+
+
+def count_movies_for_code(code: str) -> int:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT COUNT(1) AS cnt FROM movie_items WHERE code = ?",
+            (int(code),),
+        )
+        return int(cur.fetchone()["cnt"])
+
+
+def get_movie_items(code: str) -> List[Dict[str, str]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT id, code, file_id, file_type, caption, source_chat_id, source_message_id
+            FROM movie_items
+            WHERE code = ?
+            ORDER BY id ASC
+            """,
+            (int(code),),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+def get_next_code() -> int:
+    with _connect() as conn:
+        cur = conn.execute("SELECT COALESCE(MAX(code), 0) AS max_code FROM movie_items")
+        return int(cur.fetchone()["max_code"]) + 1
 
 
 def record_view(day: str, code: str) -> None:
@@ -209,3 +306,101 @@ def get_users() -> List[int]:
     with _connect() as conn:
         cur = conn.execute("SELECT user_id FROM users ORDER BY user_id")
         return [row["user_id"] for row in cur.fetchall()]
+
+
+def save_upload_session(admin_id: int, code: int, items: List[Dict[str, str]], now: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO upload_sessions (admin_id, code, items_json, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (admin_id, code, json.dumps(items), now),
+        )
+        conn.commit()
+
+
+def get_upload_session(admin_id: int) -> Optional[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT admin_id, code, items_json, created_at FROM upload_sessions WHERE admin_id = ?",
+            (admin_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "admin_id": row["admin_id"],
+            "code": row["code"],
+            "items": json.loads(row["items_json"]),
+            "created_at": row["created_at"],
+        }
+
+
+def clear_upload_session(admin_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM upload_sessions WHERE admin_id = ?", (admin_id,))
+        conn.commit()
+
+
+def add_join_request(chat_id: int, user_id: int, requested_at: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO join_requests (chat_id, user_id, requested_at)
+            VALUES (?, ?, ?)
+            """,
+            (chat_id, user_id, requested_at),
+        )
+        conn.commit()
+
+
+def remove_join_request(chat_id: int, user_id: int) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "DELETE FROM join_requests WHERE chat_id = ? AND user_id = ?",
+            (chat_id, user_id),
+        )
+        conn.commit()
+
+
+def has_join_request(chat_id: int, user_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT 1 FROM join_requests WHERE chat_id = ? AND user_id = ?",
+            (chat_id, user_id),
+        )
+        return cur.fetchone() is not None
+
+
+def _migrate_movies(conn: sqlite3.Connection) -> None:
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='movies'"
+    )
+    has_movies = cur.fetchone() is not None
+    if not has_movies:
+        return
+    cur = conn.execute("SELECT COUNT(1) AS cnt FROM movie_items")
+    if int(cur.fetchone()["cnt"]) > 0:
+        return
+    cur = conn.execute("SELECT code, file_id, file_type, caption FROM movies")
+    rows = cur.fetchall()
+    for row in rows:
+        code = row["code"]
+        if not str(code).isdigit():
+            continue
+        conn.execute(
+            """
+            INSERT INTO movie_items (code, file_id, file_type, caption)
+            VALUES (?, ?, ?, ?)
+            """,
+            (int(code), row["file_id"], row["file_type"], row["caption"]),
+        )
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
+    cur = conn.execute(f"PRAGMA table_info({table})")
+    columns = {row["name"] for row in cur.fetchall()}
+    if column in columns:
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
