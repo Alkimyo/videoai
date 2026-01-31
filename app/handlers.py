@@ -1,8 +1,10 @@
+import asyncio
 import datetime as dt
 from typing import Optional
 
 from aiogram import F, Router
 from aiogram.enums import ChatMemberStatus
+from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, ChatJoinRequest, Message
 
@@ -40,6 +42,7 @@ from app.keyboards import (
 )
 
 router = Router()
+SEND_DELAY_SECONDS = 0.7
 
 
 async def _check_subscriptions(bot, user_id: int, channels: list) -> bool:
@@ -110,6 +113,72 @@ def _extract_media(message: Message) -> tuple[Optional[str], Optional[str], Opti
     if message.document:
         return message.document.file_id, "document", message.caption
     return None, None, None
+
+
+async def _wait_retry(err: TelegramRetryAfter) -> None:
+    await asyncio.sleep(err.retry_after + 0.5)
+
+
+async def _safe_copy_message(
+    bot, chat_id: int, from_chat_id: int, message_id: int
+) -> None:
+    while True:
+        try:
+            await bot.copy_message(
+                chat_id=chat_id,
+                from_chat_id=from_chat_id,
+                message_id=message_id,
+                protect_content=True,
+            )
+            return
+        except TelegramRetryAfter as err:
+            await _wait_retry(err)
+        except TelegramAPIError:
+            return
+
+
+async def _safe_send_video(message: Message, file_id: str, caption: Optional[str]) -> None:
+    while True:
+        try:
+            await message.answer_video(
+                file_id,
+                caption=caption,
+                protect_content=True,
+            )
+            return
+        except TelegramRetryAfter as err:
+            await _wait_retry(err)
+        except TelegramAPIError:
+            return
+
+
+async def _safe_send_document(message: Message, file_id: str, caption: Optional[str]) -> None:
+    while True:
+        try:
+            await message.answer_document(
+                file_id,
+                caption=caption,
+                protect_content=True,
+            )
+            return
+        except TelegramRetryAfter as err:
+            await _wait_retry(err)
+        except TelegramAPIError:
+            return
+
+
+async def _safe_send_to_channel(
+    bot, chat_id: int, file_id: str, file_type: str, caption: Optional[str]
+) -> Optional[Message]:
+    while True:
+        try:
+            if file_type == "document":
+                return await bot.send_document(chat_id, file_id, caption=caption)
+            return await bot.send_video(chat_id, file_id, caption=caption)
+        except TelegramRetryAfter as err:
+            await _wait_retry(err)
+        except TelegramAPIError:
+            return None
 
 
 @router.message(Command("start"))
@@ -421,22 +490,36 @@ async def _send_movie(message: Message, code: str) -> bool:
     items = get_movie_items(code)
     if not items:
         return False
-    for item in items:
+    progress = None
+    if len(items) > 1:
+        progress = await message.answer(f"Yuborilmoqda: 0/{len(items)}")
+    for idx, item in enumerate(items, start=1):
         caption = item.get("caption") or None
         source_chat_id = item.get("source_chat_id")
         source_message_id = item.get("source_message_id")
         if source_chat_id and source_message_id:
-            await message.bot.copy_message(
-                chat_id=message.chat.id,
-                from_chat_id=source_chat_id,
-                message_id=source_message_id,
+            await _safe_copy_message(
+                message.bot,
+                message.chat.id,
+                source_chat_id,
+                source_message_id,
             )
-            continue
-        if item.get("file_type") == "document":
-            await message.answer_document(item["file_id"], caption=caption)
+        elif item.get("file_type") == "document":
+            await _safe_send_document(message, item["file_id"], caption)
         else:
-            await message.answer_video(item["file_id"], caption=caption)
+            await _safe_send_video(message, item["file_id"], caption)
+        await asyncio.sleep(SEND_DELAY_SECONDS)
+        if progress:
+            try:
+                await progress.edit_text(f"Yuborilmoqda: {idx}/{len(items)}")
+            except Exception:
+                pass
     record_view(_today(), str(code))
+    if progress:
+        try:
+            await progress.edit_text("Yuborildi.")
+        except Exception:
+            pass
     return True
 
 
@@ -576,25 +659,31 @@ async def upload_commit_callback(callback: CallbackQuery):
         await callback.message.edit_text("Bu kod uchun limit to'ldi.")
         return
     added = 0
+    progress = await callback.message.edit_text(f"Yuklanmoqda: 0/{len(items)}")
     for item in items:
         caption = item.get("caption") or None
-        if item.get("file_type") == "document":
-            msg = await callback.bot.send_document(
-                SOURCE_CHANNEL_ID, item["file_id"], caption=caption
-            )
-        else:
-            msg = await callback.bot.send_video(
-                SOURCE_CHANNEL_ID, item["file_id"], caption=caption
-            )
-        add_movie(
-            str(session["code"]),
+        msg = await _safe_send_to_channel(
+            callback.bot,
+            SOURCE_CHANNEL_ID,
             item["file_id"],
             item["file_type"],
-            item.get("caption") or "",
-            source_chat_id=msg.chat.id,
-            source_message_id=msg.message_id,
+            caption,
         )
-        added += 1
+        if msg:
+            add_movie(
+                str(session["code"]),
+                item["file_id"],
+                item["file_type"],
+                item.get("caption") or "",
+                source_chat_id=msg.chat.id,
+                source_message_id=msg.message_id,
+            )
+            added += 1
+        await asyncio.sleep(SEND_DELAY_SECONDS)
+        try:
+            await progress.edit_text(f"Yuklanmoqda: {added}/{len(items)}")
+        except Exception:
+            pass
     clear_upload_session(callback.from_user.id)
     await callback.message.edit_text(f"Yuklandi. Kod: {session['code']}. Fayllar: {added}")
 
