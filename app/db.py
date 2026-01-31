@@ -77,7 +77,8 @@ def init_db() -> None:
                 admin_id INTEGER PRIMARY KEY,
                 code INTEGER NOT NULL,
                 items_json TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                status_message_id INTEGER
             )
             """
         )
@@ -101,6 +102,7 @@ def init_db() -> None:
         _ensure_column(conn, "channels", "invite_link", "TEXT")
         _ensure_column(conn, "movie_items", "source_chat_id", "INTEGER")
         _ensure_column(conn, "movie_items", "source_message_id", "INTEGER")
+        _ensure_column(conn, "upload_sessions", "status_message_id", "INTEGER")
         _migrate_movies(conn)
         conn.commit()
 
@@ -308,14 +310,22 @@ def get_users() -> List[int]:
         return [row["user_id"] for row in cur.fetchall()]
 
 
-def save_upload_session(admin_id: int, code: int, items: List[Dict[str, str]], now: str) -> None:
+def save_upload_session(
+    admin_id: int,
+    code: int,
+    items: List[Dict[str, str]],
+    now: str,
+    status_message_id: Optional[int] = None,
+) -> None:
     with _connect() as conn:
         conn.execute(
             """
-            INSERT OR REPLACE INTO upload_sessions (admin_id, code, items_json, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT OR REPLACE INTO upload_sessions (
+                admin_id, code, items_json, created_at, status_message_id
+            )
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (admin_id, code, json.dumps(items), now),
+            (admin_id, code, json.dumps(items), now, status_message_id),
         )
         conn.commit()
 
@@ -323,7 +333,11 @@ def save_upload_session(admin_id: int, code: int, items: List[Dict[str, str]], n
 def get_upload_session(admin_id: int) -> Optional[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
-            "SELECT admin_id, code, items_json, created_at FROM upload_sessions WHERE admin_id = ?",
+            """
+            SELECT admin_id, code, items_json, created_at, status_message_id
+            FROM upload_sessions
+            WHERE admin_id = ?
+            """,
             (admin_id,),
         )
         row = cur.fetchone()
@@ -334,6 +348,7 @@ def get_upload_session(admin_id: int) -> Optional[Dict[str, object]]:
             "code": row["code"],
             "items": json.loads(row["items_json"]),
             "created_at": row["created_at"],
+            "status_message_id": row["status_message_id"],
         }
 
 

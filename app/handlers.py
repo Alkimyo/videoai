@@ -181,6 +181,27 @@ async def _safe_send_to_channel(
             return None
 
 
+async def _update_session_prompt(bot, admin_id: int, session, text: str) -> Optional[int]:
+    message_id = session.get("status_message_id")
+    try:
+        if message_id:
+            await bot.edit_message_text(
+                text=text,
+                chat_id=admin_id,
+                message_id=message_id,
+                reply_markup=upload_session_keyboard(),
+            )
+            return message_id
+    except Exception:
+        pass
+    msg = await bot.send_message(
+        chat_id=admin_id,
+        text=text,
+        reply_markup=upload_session_keyboard(),
+    )
+    return msg.message_id
+
+
 @router.message(Command("start"))
 async def start_handler(message: Message):
     add_user(message.from_user.id)
@@ -427,20 +448,19 @@ async def add_movie_handler(message: Message, command: CommandObject):
     else:
         code = _generate_code()
 
+    msg = await message.answer(f"Kod {code}. Video yuboring.")
     save_upload_session(
         message.from_user.id,
         int(code),
         [],
         _now(),
+        status_message_id=msg.message_id,
     )
-    await message.answer(f"Kod {code}. Video yuboring.")
 
     if not message.reply_to_message:
         return
 
     reply = message.reply_to_message
-    
-
     file_id, file_type, caption = _extract_media(reply)
 
     if not file_id:
@@ -458,15 +478,18 @@ async def add_movie_handler(message: Message, command: CommandObject):
     session["items"].append(
         {"file_id": file_id, "file_type": file_type, "caption": caption or ""}
     )
+    message_id = await _update_session_prompt(
+        message.bot,
+        message.from_user.id,
+        session,
+        f"Video qo'shildi. Kod: {session['code']}. Davom etamizmi?",
+    )
     save_upload_session(
         message.from_user.id,
         int(session["code"]),
         session["items"],
         session["created_at"],
-    )
-    await message.answer(
-        f"Video qo'shildi. Kod: {session['code']}. Davom etamizmi?",
-        reply_markup=upload_session_keyboard(),
+        status_message_id=message_id,
     )
 
 
@@ -591,12 +614,20 @@ async def admin_media_handler(message: Message):
             await message.answer("SOURCE_CHANNEL_ID sozlanmagan.")
             return
         code = _generate_code()
+        msg = await message.answer(f"Kod {code}. Video yuboring.")
         session = {
             "code": int(code),
             "items": [],
             "created_at": _now(),
+            "status_message_id": msg.message_id,
         }
-        save_upload_session(message.from_user.id, int(code), [], session["created_at"])
+        save_upload_session(
+            message.from_user.id,
+            int(code),
+            [],
+            session["created_at"],
+            status_message_id=msg.message_id,
+        )
     file_id, file_type, caption = _extract_media(message)
     if not file_id:
         await message.answer("Faqat video yoki document qabul qilinadi.")
@@ -608,13 +639,19 @@ async def admin_media_handler(message: Message):
     session["items"].append(
         {"file_id": file_id, "file_type": file_type, "caption": caption or ""}
     )
+    message_id = await _update_session_prompt(
+        message.bot,
+        message.from_user.id,
+        session,
+        f"Video qo'shildi. Kod: {session['code']}. Davom etamizmi?",
+    )
     save_upload_session(
         message.from_user.id,
         int(session["code"]),
         session["items"],
         session["created_at"],
+        status_message_id=message_id,
     )
-    await message.answer("Video qo'shildi. Davom etamizmi?", reply_markup=upload_session_keyboard())
 
 
 @router.callback_query(F.data == "upload:more")
@@ -626,7 +663,19 @@ async def upload_more_callback(callback: CallbackQuery):
     if not session:
         await callback.message.edit_text("Sessiya topilmadi.")
         return
-    await callback.message.edit_text("Yana video yuboring.")
+    message_id = await _update_session_prompt(
+        callback.bot,
+        callback.from_user.id,
+        session,
+        "Yana video yuboring.",
+    )
+    save_upload_session(
+        callback.from_user.id,
+        int(session["code"]),
+        session["items"],
+        session["created_at"],
+        status_message_id=message_id,
+    )
 
 
 @router.callback_query(F.data == "upload:cancel")
