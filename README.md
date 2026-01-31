@@ -12,8 +12,7 @@ python -m app
 - Add mandatory channels: `/addchannel @channelname` or `/addchannel -100...`
 - Private channel: `/addchannel -100... <invite_link>`
 - Remove channel: `/delchannel @channelname` or `/delchannel -100...`
-- Add movie: `/addmovie [code]`, then send videos; click `Yuklash` to publish
-- Shortcut: send a video to the bot as admin to auto-start a new code
+- Add movie: reply to a video/document and run `/addmovie [code]`
 - Send movie: user sends `CODE` or `/movie CODE` (numeric codes)
 - One code can have multiple videos; repeat `/addmovie 3` up to `MAX_MOVIES_PER_CODE` (default 1)
 - Admin panel: `/admin` (inline buttons)
