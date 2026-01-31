@@ -15,7 +15,7 @@ python -m app
 - Add movie: `/addmovie [code]`, then send videos; click `Yuklash` to publish
 - Shortcut: send a video to the bot as admin to auto-start a new code
 - Send movie: user sends `CODE` or `/movie CODE` (numeric codes)
-- One code can have multiple videos; repeat `/addmovie 3` up to `MAX_MOVIES_PER_CODE` (default 10)
+- One code can have multiple videos; repeat `/addmovie 3` up to `MAX_MOVIES_PER_CODE` (default 1)
 - Admin panel: `/admin` (inline buttons)
 - Stats: `/stats`
 - Broadcast: `/broadcast <text>` or reply with image/video
