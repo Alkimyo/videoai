@@ -21,3 +21,7 @@ python -m app
 - Broadcast: `/broadcast <text>` or reply with image/video
 
 `SOURCE_CHANNEL_ID` must be set for movie uploads.
+
+## Web page
+
+Set `WEBAPP_ENABLED=1` to show a simple page at `/` with text "Ishlamoqda".

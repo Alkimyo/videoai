@@ -13,6 +13,7 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").rstrip("/")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
 WEBAPP_HOST = os.getenv("WEBAPP_HOST", "0.0.0.0")
 WEBAPP_PORT = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "10000")))
+WEBAPP_ENABLED = os.getenv("WEBAPP_ENABLED", "1") == "1"
 
 SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID", "0") or 0)
 MAX_MOVIES_PER_CODE = int(os.getenv("MAX_MOVIES_PER_CODE", "10"))
