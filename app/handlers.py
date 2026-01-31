@@ -370,15 +370,7 @@ async def add_movie_handler(message: Message, command: CommandObject):
         return
 
     reply = message.reply_to_message
-    if SOURCE_CHANNEL_ID:
-        source_ok = False
-        if reply.forward_from_chat and reply.forward_from_chat.id == SOURCE_CHANNEL_ID:
-            source_ok = True
-        if reply.sender_chat and reply.sender_chat.id == SOURCE_CHANNEL_ID:
-            source_ok = True
-        if not source_ok:
-            await message.answer("Bu video ruxsat etilgan kanaldan emas.")
-            return
+    
 
     file_id, file_type, caption = _extract_media(reply)
 
