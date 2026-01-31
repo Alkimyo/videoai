@@ -78,7 +78,8 @@ def init_db() -> None:
                 code INTEGER NOT NULL,
                 items_json TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                status_message_id INTEGER
+                status_message_id INTEGER,
+                allow_more INTEGER NOT NULL DEFAULT 1
             )
             """
         )
@@ -103,6 +104,7 @@ def init_db() -> None:
         _ensure_column(conn, "movie_items", "source_chat_id", "INTEGER")
         _ensure_column(conn, "movie_items", "source_message_id", "INTEGER")
         _ensure_column(conn, "upload_sessions", "status_message_id", "INTEGER")
+        _ensure_column(conn, "upload_sessions", "allow_more", "INTEGER")
         _migrate_movies(conn)
         conn.commit()
 
@@ -316,16 +318,17 @@ def save_upload_session(
     items: List[Dict[str, str]],
     now: str,
     status_message_id: Optional[int] = None,
+    allow_more: int = 1,
 ) -> None:
     with _connect() as conn:
         conn.execute(
             """
             INSERT OR REPLACE INTO upload_sessions (
-                admin_id, code, items_json, created_at, status_message_id
+                admin_id, code, items_json, created_at, status_message_id, allow_more
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (admin_id, code, json.dumps(items), now, status_message_id),
+            (admin_id, code, json.dumps(items), now, status_message_id, allow_more),
         )
         conn.commit()
 
@@ -334,7 +337,7 @@ def get_upload_session(admin_id: int) -> Optional[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
             """
-            SELECT admin_id, code, items_json, created_at, status_message_id
+            SELECT admin_id, code, items_json, created_at, status_message_id, allow_more
             FROM upload_sessions
             WHERE admin_id = ?
             """,
@@ -349,6 +352,7 @@ def get_upload_session(admin_id: int) -> Optional[Dict[str, object]]:
             "items": json.loads(row["items_json"]),
             "created_at": row["created_at"],
             "status_message_id": row["status_message_id"],
+            "allow_more": row["allow_more"] if row["allow_more"] is not None else 1,
         }
 
 

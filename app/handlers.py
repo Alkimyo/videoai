@@ -455,6 +455,7 @@ async def add_movie_handler(message: Message, command: CommandObject):
         [],
         _now(),
         status_message_id=msg.message_id,
+        allow_more=1,
     )
 
     if not message.reply_to_message:
@@ -470,6 +471,12 @@ async def add_movie_handler(message: Message, command: CommandObject):
     session = get_upload_session(message.from_user.id)
     if not session:
         await message.answer("Upload sessiya topilmadi.")
+        return
+    if not session.get("allow_more", 1):
+        await message.answer(
+            "Avvalgi sessiya faol. Davom etasizmi?",
+            reply_markup=upload_session_keyboard(),
+        )
         return
     existing = count_movies_for_code(str(session["code"]))
     if existing + len(session["items"]) >= MAX_MOVIES_PER_CODE:
@@ -490,6 +497,7 @@ async def add_movie_handler(message: Message, command: CommandObject):
         session["items"],
         session["created_at"],
         status_message_id=message_id,
+        allow_more=0,
     )
 
 
@@ -620,6 +628,7 @@ async def admin_media_handler(message: Message):
             "items": [],
             "created_at": _now(),
             "status_message_id": msg.message_id,
+            "allow_more": 1,
         }
         save_upload_session(
             message.from_user.id,
@@ -627,6 +636,7 @@ async def admin_media_handler(message: Message):
             [],
             session["created_at"],
             status_message_id=msg.message_id,
+            allow_more=1,
         )
     file_id, file_type, caption = _extract_media(message)
     if not file_id:
@@ -635,6 +645,12 @@ async def admin_media_handler(message: Message):
     existing = count_movies_for_code(str(session["code"]))
     if existing + len(session["items"]) >= MAX_MOVIES_PER_CODE:
         await message.answer("Bu kod uchun limit to'ldi.")
+        return
+    if not session.get("allow_more", 1):
+        await message.answer(
+            "Avvalgi sessiya faol. Davom etasizmi?",
+            reply_markup=upload_session_keyboard(),
+        )
         return
     session["items"].append(
         {"file_id": file_id, "file_type": file_type, "caption": caption or ""}
@@ -651,6 +667,7 @@ async def admin_media_handler(message: Message):
         session["items"],
         session["created_at"],
         status_message_id=message_id,
+        allow_more=0,
     )
 
 
@@ -675,6 +692,7 @@ async def upload_more_callback(callback: CallbackQuery):
         session["items"],
         session["created_at"],
         status_message_id=message_id,
+        allow_more=1,
     )
 
 
