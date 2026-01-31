@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from typing import Dict, List, Optional, Tuple
 
@@ -11,6 +12,7 @@ def _connect() -> sqlite3.Connection:
 
 
 def init_db() -> None:
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     with _connect() as conn:
         cur = conn.cursor()
         cur.execute(
