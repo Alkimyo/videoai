@@ -1,0 +1,17 @@
+services:
+  - type: worker
+    name: kinobot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app
+    autoDeploy: true
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: OWNER_ID
+        sync: false
+      - key: DB_PATH
+        value: data/bot.db
+      - key: SOURCE_CHANNEL_ID
+        sync: false
