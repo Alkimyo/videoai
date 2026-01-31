@@ -25,7 +25,7 @@ def _home(_: web.Request) -> web.Response:
     return web.Response(text="Ishlamoqda")
 
 
-async def on_startup(_: Bot) -> None:
+async def on_startup(*_: object) -> None:
     init_db()
     ensure_owner()
 
