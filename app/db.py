@@ -47,6 +47,34 @@ def init_db() -> None:
         )
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS serials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code INTEGER NOT NULL UNIQUE,
+                title TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS serial_parts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                serial_id INTEGER NOT NULL,
+                part INTEGER NOT NULL,
+                file_id TEXT NOT NULL,
+                file_type TEXT NOT NULL,
+                caption TEXT,
+                source_chat_id INTEGER,
+                source_message_id INTEGER,
+                UNIQUE(serial_id, part)
+            )
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_serial_parts_serial_id ON serial_parts (serial_id)"
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS movie_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 code INTEGER NOT NULL,
@@ -80,6 +108,17 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 status_message_id INTEGER,
                 allow_more INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS serial_sessions (
+                admin_id INTEGER PRIMARY KEY,
+                state TEXT NOT NULL,
+                serial_id INTEGER,
+                next_part INTEGER,
+                created_at TEXT NOT NULL
             )
             """
         )
@@ -200,6 +239,144 @@ def add_movie(
 def del_movie(code: str) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM movie_items WHERE code = ?", (int(code),))
+        conn.commit()
+
+
+def get_next_serial_code() -> int:
+    with _connect() as conn:
+        cur = conn.execute("SELECT COALESCE(MAX(code), 0) AS max_code FROM serials")
+        return int(cur.fetchone()["max_code"]) + 1
+
+
+def add_serial(title: str, created_at: str) -> Dict[str, object]:
+    code = get_next_serial_code()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO serials (code, title, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (code, title, created_at),
+        )
+        cur = conn.execute(
+            "SELECT id, code, title, created_at FROM serials WHERE code = ?",
+            (code,),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return dict(row)
+
+
+def get_serial_by_title(title: str) -> Optional[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT id, code, title, created_at FROM serials WHERE title = ?",
+            (title,),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def get_serial_by_code(code: int) -> Optional[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT id, code, title, created_at FROM serials WHERE code = ?",
+            (code,),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def add_serial_part(
+    serial_id: int,
+    part: int,
+    file_id: str,
+    file_type: str,
+    caption: str,
+    source_chat_id: Optional[int] = None,
+    source_message_id: Optional[int] = None,
+) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO serial_parts (
+                serial_id, part, file_id, file_type, caption, source_chat_id, source_message_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                serial_id,
+                part,
+                file_id,
+                file_type,
+                caption,
+                source_chat_id,
+                source_message_id,
+            ),
+        )
+        conn.commit()
+
+
+def serial_part_exists(serial_id: int, part: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT 1 FROM serial_parts WHERE serial_id = ? AND part = ?",
+            (serial_id, part),
+        )
+        return cur.fetchone() is not None
+
+
+def get_serial_parts(serial_id: int) -> List[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT part, file_id, file_type, caption, source_chat_id, source_message_id
+            FROM serial_parts
+            WHERE serial_id = ?
+            ORDER BY part ASC, id ASC
+            """,
+            (serial_id,),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+def save_serial_session(
+    admin_id: int,
+    state: str,
+    created_at: str,
+    serial_id: Optional[int] = None,
+    next_part: Optional[int] = None,
+) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO serial_sessions (
+                admin_id, state, serial_id, next_part, created_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (admin_id, state, serial_id, next_part, created_at),
+        )
+        conn.commit()
+
+
+def get_serial_session(admin_id: int) -> Optional[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT admin_id, state, serial_id, next_part, created_at
+            FROM serial_sessions
+            WHERE admin_id = ?
+            """,
+            (admin_id,),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def clear_serial_session(admin_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM serial_sessions WHERE admin_id = ?", (admin_id,))
         conn.commit()
 
 
