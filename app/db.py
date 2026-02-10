@@ -287,6 +287,16 @@ def get_serial_by_code(code: int) -> Optional[Dict[str, object]]:
         return dict(row) if row else None
 
 
+def get_serial_by_id(serial_id: int) -> Optional[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT id, code, title, created_at FROM serials WHERE id = ?",
+            (serial_id,),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
 def add_serial_part(
     serial_id: int,
     part: int,
@@ -338,6 +348,20 @@ def get_serial_parts(serial_id: int) -> List[Dict[str, object]]:
             (serial_id,),
         )
         return [dict(row) for row in cur.fetchall()]
+
+
+def get_serial_part(serial_id: int, part: int) -> Optional[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT part, file_id, file_type, caption, source_chat_id, source_message_id
+            FROM serial_parts
+            WHERE serial_id = ? AND part = ?
+            """,
+            (serial_id, part),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
 
 
 def save_serial_session(

@@ -1,5 +1,6 @@
 from typing import Iterable
 
+from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
@@ -33,6 +34,8 @@ def admin_panel_keyboard():
     kb.button(text="Serial qo'shish", callback_data="admin:addserial")
     kb.button(text="Qism qo'shish", callback_data="admin:addpart")
     kb.button(text="E'lon yuborish", callback_data="admin:broadcast")
+    kb.button(text="Loglar", callback_data="admin:logs")
+    kb.button(text="Foydalanuvchilar", callback_data="admin:users")
     kb.button(text="Statistika", callback_data="admin:stats")
     kb.button(text="Yordam", callback_data="admin:help")
     kb.adjust(2)
@@ -63,4 +66,54 @@ def serial_flow_keyboard():
     kb.button(text="Keyingi qism", callback_data="serial:continue")
     kb.button(text="Bekor qilish", callback_data="serial:cancel")
     kb.adjust(2)
+    return kb.as_markup()
+
+
+def log_cancel_keyboard():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="Bekor qilish", callback_data="log:cancel")
+    return kb.as_markup()
+
+
+def serial_parts_keyboard(serial_id: int, parts: Iterable[int], page: int, per_page: int):
+    kb = InlineKeyboardBuilder()
+    parts_list = list(parts)
+    start = page * per_page
+    end = start + per_page
+    page_parts = parts_list[start:end]
+    for part in page_parts:
+        kb.button(
+            text=str(part),
+            callback_data=f"serialpart:{serial_id}:{part}",
+        )
+    kb.adjust(5)
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text="<",
+                callback_data=f"serialpage:{serial_id}:{page - 1}",
+            )
+        )
+    nav_buttons.append(InlineKeyboardButton(text=f"{page + 1}", callback_data="noop"))
+    if end < len(parts_list):
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text=">",
+                callback_data=f"serialpage:{serial_id}:{page + 1}",
+            )
+        )
+    if nav_buttons:
+        kb.row(*nav_buttons)
+    return kb.as_markup()
+
+
+def users_keyboard(page: int, total_pages: int):
+    kb = InlineKeyboardBuilder()
+    if page > 0:
+        kb.button(text="<", callback_data=f"admin:users:{page - 1}")
+    kb.button(text=f"{page + 1}/{total_pages}", callback_data="noop")
+    if page + 1 < total_pages:
+        kb.button(text=">", callback_data=f"admin:users:{page + 1}")
+    kb.adjust(3)
     return kb.as_markup()

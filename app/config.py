@@ -8,6 +8,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 OWNER_ID = int(os.getenv("OWNER_ID", "0") or 0)
 
 DB_PATH = os.getenv("DB_PATH", "data/bot.db")
+LOG_PATH = os.getenv("LOG_PATH", "data/bot.log")
 
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").rstrip("/")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")

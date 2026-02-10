@@ -1,5 +1,7 @@
 import asyncio
 import datetime as dt
+import os
+from collections import deque
 from typing import Optional
 
 from aiogram import F, Router
@@ -8,7 +10,7 @@ from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, ChatJoinRequest, Message
 
-from app.config import MAX_MOVIES_PER_CODE, OWNER_ID, SOURCE_CHANNEL_ID
+from app.config import LOG_PATH, MAX_MOVIES_PER_CODE, OWNER_ID, SOURCE_CHANNEL_ID
 from app.db import (
     add_admin,
     add_channel,
@@ -28,7 +30,9 @@ from app.db import (
     get_next_code,
     get_recent_days,
     get_serial_by_code,
+    get_serial_by_id,
     get_serial_by_title,
+    get_serial_part,
     get_serial_parts,
     get_serial_session,
     is_admin,
@@ -42,14 +46,22 @@ from app.db import (
 from app.keyboards import (
     admin_back_keyboard,
     admin_panel_keyboard,
+    log_cancel_keyboard,
     serial_cancel_keyboard,
     serial_flow_keyboard,
+    serial_parts_keyboard,
     subscribe_keyboard,
+    users_keyboard,
     user_keyboard,
 )
 
+SERIAL_PARTS_PER_PAGE = 20
+USERS_PER_PAGE = 20
+LOG_QUERY_ADMINS: set[int] = set()
+
 router = Router()
 SEND_DELAY_SECONDS = 0.7
+LOG_TAIL_LINES = 40
 
 
 async def _check_subscriptions(bot, user_id: int, channels: list) -> bool:
@@ -100,6 +112,74 @@ async def user_send_code_callback(callback: CallbackQuery):
     await callback.message.edit_text("Kino kodini yuboring.")
 
 
+@router.callback_query(F.data == "noop")
+async def noop_callback(callback: CallbackQuery):
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("serialpart:"))
+async def serial_part_callback(callback: CallbackQuery):
+    channels = get_channels()
+    if channels:
+        ok = await _check_subscriptions(callback.bot, callback.from_user.id, channels)
+        if not ok:
+            await callback.answer("Avval obuna bo'ling.", show_alert=True)
+            return
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    try:
+        serial_id = int(parts[1])
+        part = int(parts[2])
+    except ValueError:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    ok = await _send_serial_part(callback.message, serial_id, part)
+    if not ok:
+        await callback.answer("Qism topilmadi.", show_alert=True)
+        return
+    _log_event("serial_part_sent", callback.from_user.id, f"serial_id={serial_id} part={part}")
+
+
+@router.callback_query(F.data.startswith("serialpage:"))
+async def serial_page_callback(callback: CallbackQuery):
+    channels = get_channels()
+    if channels:
+        ok = await _check_subscriptions(callback.bot, callback.from_user.id, channels)
+        if not ok:
+            await callback.answer("Avval obuna bo'ling.", show_alert=True)
+            return
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    try:
+        serial_id = int(parts[1])
+        page = int(parts[2])
+    except ValueError:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    serial = get_serial_by_id(serial_id)
+    if not serial:
+        await callback.answer("Serial topilmadi.", show_alert=True)
+        return
+    serial_parts = get_serial_parts(serial_id)
+    part_numbers = [int(item["part"]) for item in serial_parts if item.get("part") is not None]
+    if not part_numbers:
+        await callback.answer("Serialda qismlar yo'q.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        f"{serial['title']} qismlari:",
+        reply_markup=serial_parts_keyboard(
+            serial_id,
+            part_numbers,
+            page=page,
+            per_page=SERIAL_PARTS_PER_PAGE,
+        ),
+    )
+
+
 def _today() -> str:
     return dt.datetime.utcnow().date().isoformat()
 
@@ -125,6 +205,42 @@ def _parse_part(raw: str) -> Optional[int]:
 
 def _now() -> str:
     return dt.datetime.utcnow().isoformat()
+
+
+def _log_event(event: str, user_id: Optional[int] = None, detail: str = "") -> None:
+    timestamp = dt.datetime.utcnow().isoformat()
+    user_part = f"user_id={user_id}" if user_id is not None else "user_id=-"
+    detail_part = detail.replace("\n", " ").strip()
+    line = f"{timestamp} {event} {user_part}"
+    if detail_part:
+        line = f"{line} {detail_part}"
+    log_dir = os.path.dirname(LOG_PATH)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+    with open(LOG_PATH, "a", encoding="utf-8") as handle:
+        handle.write(f"{line}\n")
+
+
+def _tail_log(limit: int) -> list[str]:
+    if not os.path.exists(LOG_PATH):
+        return []
+    lines = deque(maxlen=limit)
+    with open(LOG_PATH, "r", encoding="utf-8") as handle:
+        for line in handle:
+            lines.append(line.rstrip("\n"))
+    return list(lines)
+
+
+def _tail_log_for_user(user_id: int, limit: int) -> list[str]:
+    if not os.path.exists(LOG_PATH):
+        return []
+    lines = deque(maxlen=limit)
+    needle = f"user_id={user_id}"
+    with open(LOG_PATH, "r", encoding="utf-8") as handle:
+        for line in handle:
+            if needle in line:
+                lines.append(line.rstrip("\n"))
+    return list(lines)
 
 
 def _extract_media(message: Message) -> tuple[Optional[str], Optional[str], Optional[str]]:
@@ -204,6 +320,7 @@ async def _safe_send_to_channel(
 @router.message(Command("start"))
 async def start_handler(message: Message):
     add_user(message.from_user.id)
+    _log_event("user_start", message.from_user.id)
     if not await ensure_subscribed(message):
         return
     banner = (
@@ -299,6 +416,7 @@ async def admin_back_callback(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
+    LOG_QUERY_ADMINS.discard(callback.from_user.id)
     await callback.message.edit_text("Admin panel:", reply_markup=admin_panel_keyboard())
 
 
@@ -310,6 +428,18 @@ async def serial_cancel_callback(callback: CallbackQuery):
     clear_serial_session(callback.from_user.id)
     await callback.message.edit_text(
         "Serial qo'shish bekor qilindi.",
+        reply_markup=admin_panel_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "log:cancel")
+async def log_cancel_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    LOG_QUERY_ADMINS.discard(callback.from_user.id)
+    await callback.message.edit_text(
+        "Loglar so'rovi bekor qilindi.",
         reply_markup=admin_panel_keyboard(),
     )
 
@@ -371,6 +501,60 @@ async def admin_stats_callback(callback: CallbackQuery):
     await callback.message.edit_text("\n".join(lines), reply_markup=admin_back_keyboard())
 
 
+@router.callback_query(F.data == "admin:users")
+async def admin_users_callback(callback: CallbackQuery):
+    await _render_users_page(callback, page=0)
+
+
+@router.callback_query(F.data.startswith("admin:users:"))
+async def admin_users_page_callback(callback: CallbackQuery):
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    try:
+        page = int(parts[2])
+    except ValueError:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    await _render_users_page(callback, page=page)
+
+
+async def _render_users_page(callback: CallbackQuery, page: int) -> None:
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    users = get_users()
+    if not users:
+        await callback.message.edit_text("Foydalanuvchilar yo'q.", reply_markup=admin_back_keyboard())
+        return
+    total = len(users)
+    total_pages = max(1, (total + USERS_PER_PAGE - 1) // USERS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * USERS_PER_PAGE
+    end = start + USERS_PER_PAGE
+    page_users = users[start:end]
+    header = f"Foydalanuvchilar: {total} ta"
+    body = "\n".join(str(user_id) for user_id in page_users)
+    text = f"{header}\n{body}"
+    await callback.message.edit_text(
+        text,
+        reply_markup=users_keyboard(page, total_pages),
+    )
+
+
+@router.callback_query(F.data == "admin:logs")
+async def admin_logs_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    LOG_QUERY_ADMINS.add(callback.from_user.id)
+    await callback.message.edit_text(
+        "Foydalanuvchi ID yoki @username yuboring.",
+        reply_markup=log_cancel_keyboard(),
+    )
+
+
 @router.callback_query(F.data == "admin:help")
 async def admin_help_callback(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
@@ -387,6 +571,9 @@ async def admin_help_callback(callback: CallbackQuery):
         "/addpart <serial_nomi|kod>\n"
         "/part <qism_raqami>\n"
         "/delmovie <code>\n"
+        "Admin panel -> Loglar\n"
+        "Admin panel -> Foydalanuvchilar\n"
+        "/log <user_id|@username>\n"
         "/stats\n"
     )
     await callback.message.edit_text(text, reply_markup=admin_back_keyboard())
@@ -690,6 +877,36 @@ async def del_movie_handler(message: Message, command: CommandObject):
 
 
 @router.message(F.text & ~F.text.startswith("/"))
+async def admin_log_text_handler(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    if message.from_user.id not in LOG_QUERY_ADMINS:
+        return
+    if get_serial_session(message.from_user.id):
+        return
+    raw = message.text.strip()
+    user_id: Optional[int] = None
+    if raw.isdigit():
+        user_id = int(raw)
+    else:
+        try:
+            chat = await message.bot.get_chat(raw)
+            user_id = chat.id
+        except Exception:
+            await message.answer("Foydalanuvchi topilmadi.")
+            return
+    lines = _tail_log_for_user(user_id, LOG_TAIL_LINES)
+    LOG_QUERY_ADMINS.discard(message.from_user.id)
+    if not lines:
+        await message.answer("Ushbu foydalanuvchi uchun log topilmadi.")
+        return
+    text = "\n".join(lines)
+    if len(text) > 3900:
+        text = text[-3900:]
+    await message.answer(text)
+
+
+@router.message(F.text & ~F.text.startswith("/"))
 async def admin_serial_text_handler(message: Message):
     if not is_admin(message.from_user.id):
         return
@@ -826,6 +1043,7 @@ async def _send_movie(message: Message, code: str) -> bool:
             except Exception:
                 pass
     record_view(_today(), str(code))
+    _log_event("movie_sent", message.from_user.id, f"code={code}")
     if progress:
         try:
             await progress.edit_text("Yuborildi.")
@@ -834,39 +1052,43 @@ async def _send_movie(message: Message, code: str) -> bool:
     return True
 
 
-async def _send_serial(message: Message, serial_id: int, title: str) -> bool:
+async def _show_serial_parts(message: Message, serial_id: int, title: str) -> bool:
     parts = get_serial_parts(serial_id)
     if not parts:
         return False
-    progress = None
-    if len(parts) > 1:
-        progress = await message.answer(f"Yuborilmoqda: 0/{len(parts)}")
-    for idx, part in enumerate(parts, start=1):
-        caption = part.get("caption") or None
-        source_chat_id = part.get("source_chat_id")
-        source_message_id = part.get("source_message_id")
-        if source_chat_id and source_message_id:
-            await _safe_copy_message(
-                message.bot,
-                message.chat.id,
-                source_chat_id,
-                source_message_id,
-            )
-        elif part.get("file_type") == "document":
-            await _safe_send_document(message, part["file_id"], caption)
-        else:
-            await _safe_send_video(message, part["file_id"], caption)
-        await asyncio.sleep(SEND_DELAY_SECONDS)
-        if progress:
-            try:
-                await progress.edit_text(f"Yuborilmoqda: {idx}/{len(parts)}")
-            except Exception:
-                pass
-    if progress:
-        try:
-            await progress.edit_text(f"Yuborildi: {title}")
-        except Exception:
-            pass
+    part_numbers = [int(item["part"]) for item in parts if item.get("part") is not None]
+    if not part_numbers:
+        return False
+    await message.answer(
+        f"{title} qismlari:",
+        reply_markup=serial_parts_keyboard(
+            serial_id,
+            part_numbers,
+            page=0,
+            per_page=SERIAL_PARTS_PER_PAGE,
+        ),
+    )
+    return True
+
+
+async def _send_serial_part(message: Message, serial_id: int, part: int) -> bool:
+    item = get_serial_part(serial_id, part)
+    if not item:
+        return False
+    caption = item.get("caption") or None
+    source_chat_id = item.get("source_chat_id")
+    source_message_id = item.get("source_message_id")
+    if source_chat_id and source_message_id:
+        await _safe_copy_message(
+            message.bot,
+            message.chat.id,
+            source_chat_id,
+            source_message_id,
+        )
+    elif item.get("file_type") == "document":
+        await _safe_send_document(message, item["file_id"], caption)
+    else:
+        await _safe_send_video(message, item["file_id"], caption)
     return True
 
 
@@ -901,7 +1123,7 @@ async def serial_command_handler(message: Message, command: CommandObject):
     if not serial:
         await message.answer("Serial topilmadi.")
         return
-    if not await _send_serial(message, serial["id"], serial["title"]):
+    if not await _show_serial_parts(message, serial["id"], serial["title"]):
         await message.answer("Serialda qismlar yo'q.")
 
 
@@ -920,12 +1142,12 @@ async def movie_text_handler(message: Message):
         if await _send_movie(message, code):
             return
         serial = get_serial_by_code(int(code))
-        if serial and await _send_serial(message, serial["id"], serial["title"]):
+        if serial and await _show_serial_parts(message, serial["id"], serial["title"]):
             return
         await message.answer("Kino yoki serial topilmadi.")
         return
     serial = get_serial_by_title(raw)
-    if serial and await _send_serial(message, serial["id"], serial["title"]):
+    if serial and await _show_serial_parts(message, serial["id"], serial["title"]):
         return
     await message.answer("Kino yoki serial topilmadi.")
 
@@ -946,6 +1168,35 @@ async def stats_handler(message: Message):
         lines.append("So'nggi kunlar:")
         lines.extend([f"{d}: {c}" for d, c in recent])
     await message.answer("\n".join(lines))
+
+
+@router.message(Command("log"))
+async def log_handler(message: Message, command: CommandObject):
+    if not is_admin(message.from_user.id):
+        await message.answer("Bu buyruq faqat adminlar uchun.")
+        return
+    if not command.args:
+        await message.answer("Foydalanish: /log <user_id|@username>")
+        return
+    raw = command.args.strip()
+    user_id: Optional[int] = None
+    if raw.isdigit():
+        user_id = int(raw)
+    else:
+        try:
+            chat = await message.bot.get_chat(raw)
+            user_id = chat.id
+        except Exception:
+            await message.answer("Foydalanuvchi topilmadi.")
+            return
+    lines = _tail_log_for_user(user_id, LOG_TAIL_LINES)
+    if not lines:
+        await message.answer("Ushbu foydalanuvchi uchun log topilmadi.")
+        return
+    text = "\n".join(lines)
+    if len(text) > 3900:
+        text = text[-3900:]
+    await message.answer(text)
 
 
 @router.chat_join_request()
