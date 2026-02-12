@@ -1058,6 +1058,10 @@ async def restore_db_handler(message: Message):
         "state": "await_file",
         "cleanup": [],
     }
+    if message.reply_to_message and message.reply_to_message.document:
+        await _process_restore_document(message, message.reply_to_message.document)
+        _log_event("restore_db_start", message.from_user.id)
+        return
     await message.answer("Backup zip yoki bot.db faylni yuboring. Bekor qilish: /cancelrestore")
     _log_event("restore_db_start", message.from_user.id)
 
@@ -1128,6 +1132,59 @@ async def cancel_restore_handler(message: Message):
     _cleanup_restore_session(message.from_user.id)
     await message.answer("DB tiklash bekor qilindi.")
     _log_event("restore_db_cancel", message.from_user.id)
+
+
+async def _process_restore_document(message: Message, document) -> None:
+    if not document:
+        return
+    filename = (document.file_name or "").lower()
+    if not (filename.endswith(".db") or filename.endswith(".zip")):
+        await message.answer("Faqat .db yoki .zip fayl yuboring.")
+        return
+    temp_dir = tempfile.mkdtemp(prefix="serialbot-restore-")
+    RESTORE_DB_SESSIONS.setdefault(message.from_user.id, {"cleanup": []})
+    RESTORE_DB_SESSIONS[message.from_user.id].setdefault("cleanup", []).append(temp_dir)
+    download_path = os.path.join(temp_dir, document.file_name or "upload.db")
+    try:
+        file = await message.bot.get_file(document.file_id)
+        await message.bot.download_file(file.file_path, download_path)
+    except Exception:
+        await message.answer("Faylni yuklab bo'lmadi.")
+        return
+    db_path = None
+    if filename.endswith(".db"):
+        db_path = download_path
+    else:
+        try:
+            with zipfile.ZipFile(download_path, "r") as archive:
+                candidate = None
+                for name in archive.namelist():
+                    if name.lower().endswith("bot.db"):
+                        candidate = name
+                        break
+                if not candidate:
+                    await message.answer("Zip ichida bot.db topilmadi.")
+                    return
+                with archive.open(candidate) as src:
+                    db_path = os.path.join(temp_dir, "bot.db")
+                    with open(db_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+        except Exception:
+            await message.answer("Zip faylni ochib bo'lmadi.")
+            return
+    if not db_path or not os.path.exists(db_path):
+        await message.answer("DB fayl topilmadi.")
+        return
+    RESTORE_DB_SESSIONS[message.from_user.id]["state"] = "await_confirm"
+    RESTORE_DB_SESSIONS[message.from_user.id]["db_path"] = db_path
+    kb = InlineKeyboardBuilder()
+    kb.button(text="Tasdiqlash", callback_data="restoredb:confirm")
+    kb.button(text="Bekor qilish", callback_data="restoredb:cancel")
+    kb.adjust(2)
+    await message.answer(
+        "DB tiklashni tasdiqlaysizmi? Hozirgi baza almashtiriladi.",
+        reply_markup=kb.as_markup(),
+    )
 
 
 @router.message(Command("addchannel"))
@@ -1449,56 +1506,7 @@ async def restore_db_document_handler(message: Message):
     session = RESTORE_DB_SESSIONS.get(message.from_user.id)
     if not session or session.get("state") != "await_file":
         return
-    document = message.document
-    if not document:
-        return
-    filename = (document.file_name or "").lower()
-    if not (filename.endswith(".db") or filename.endswith(".zip")):
-        await message.answer("Faqat .db yoki .zip fayl yuboring.")
-        return
-    temp_dir = tempfile.mkdtemp(prefix="serialbot-restore-")
-    RESTORE_DB_SESSIONS[message.from_user.id]["cleanup"].append(temp_dir)
-    download_path = os.path.join(temp_dir, document.file_name or "upload.db")
-    try:
-        file = await message.bot.get_file(document.file_id)
-        await message.bot.download_file(file.file_path, download_path)
-    except Exception:
-        await message.answer("Faylni yuklab bo'lmadi.")
-        return
-    db_path = None
-    if filename.endswith(".db"):
-        db_path = download_path
-    else:
-        try:
-            with zipfile.ZipFile(download_path, "r") as archive:
-                candidate = None
-                for name in archive.namelist():
-                    if name.lower().endswith("bot.db"):
-                        candidate = name
-                        break
-                if not candidate:
-                    await message.answer("Zip ichida bot.db topilmadi.")
-                    return
-                with archive.open(candidate) as src:
-                    db_path = os.path.join(temp_dir, "bot.db")
-                    with open(db_path, "wb") as dst:
-                        shutil.copyfileobj(src, dst)
-        except Exception:
-            await message.answer("Zip faylni ochib bo'lmadi.")
-            return
-    if not db_path or not os.path.exists(db_path):
-        await message.answer("DB fayl topilmadi.")
-        return
-    RESTORE_DB_SESSIONS[message.from_user.id]["state"] = "await_confirm"
-    RESTORE_DB_SESSIONS[message.from_user.id]["db_path"] = db_path
-    kb = InlineKeyboardBuilder()
-    kb.button(text="Tasdiqlash", callback_data="restoredb:confirm")
-    kb.button(text="Bekor qilish", callback_data="restoredb:cancel")
-    kb.adjust(2)
-    await message.answer(
-        "DB tiklashni tasdiqlaysizmi? Hozirgi baza almashtiriladi.",
-        reply_markup=kb.as_markup(),
-    )
+    await _process_restore_document(message, message.document)
 
 
 @router.callback_query(F.data.startswith("restoredb:"))
