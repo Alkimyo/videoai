@@ -7,7 +7,7 @@ from typing import Optional
 from aiogram import F, Router
 from aiogram.enums import ChatMemberStatus
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import CallbackQuery, ChatJoinRequest, Message
 
 from app.config import LOG_PATH, OWNER_ID, SOURCE_CHANNEL_ID
@@ -28,6 +28,7 @@ from app.db import (
     get_serial_part,
     get_serial_parts,
     get_serial_session,
+    get_serials,
     is_admin,
     serial_part_exists,
     save_serial_session,
@@ -42,12 +43,15 @@ from app.keyboards import (
     serial_cancel_keyboard,
     serial_flow_keyboard,
     serial_parts_keyboard,
+    serials_list_keyboard,
+    share_keyboard,
     subscribe_keyboard,
     users_keyboard,
     user_keyboard,
 )
 
 SERIAL_PARTS_PER_PAGE = 20
+SERIALS_PER_PAGE = 20
 USERS_PER_PAGE = 20
 LOG_QUERY_ADMINS: set[int] = set()
 
@@ -238,6 +242,16 @@ async def _wait_retry(err: TelegramRetryAfter) -> None:
     await asyncio.sleep(err.retry_after + 0.5)
 
 
+async def _get_share_link(bot, serial_code: int) -> Optional[str]:
+    try:
+        me = await bot.get_me()
+    except Exception:
+        return None
+    if not me.username:
+        return None
+    return f"https://t.me/{me.username}?start={serial_code}"
+
+
 async def _safe_copy_message(
     bot, chat_id: int, from_chat_id: int, message_id: int
 ) -> None:
@@ -300,12 +314,20 @@ async def _safe_send_to_channel(
             return None
 
 
-@router.message(Command("start"))
-async def start_handler(message: Message):
-    add_user(message.from_user.id)
+@router.message(CommandStart())
+async def start_handler(message: Message, command: CommandObject):
+    add_user(message.from_user.id, message.from_user.username)
     _log_event("user_start", message.from_user.id)
     if not await ensure_subscribed(message):
         return
+    if command.args:
+        code = _parse_code(command.args)
+        if code:
+            serial = get_serial_by_code(int(code))
+            if serial and await _show_serial_parts(message, serial["id"], serial["title"]):
+                return
+            await message.answer("Serial topilmadi.")
+            return
     banner = (
         "====================\n"
         "   S E R I A L  B O T\n"
@@ -475,6 +497,47 @@ async def admin_users_callback(callback: CallbackQuery):
     await _render_users_page(callback, page=0)
 
 
+@router.callback_query(F.data == "admin:serials")
+async def admin_serials_callback(callback: CallbackQuery):
+    await _render_serials_page(callback, page=0)
+
+
+@router.callback_query(F.data.startswith("admin:serials:"))
+async def admin_serials_page_callback(callback: CallbackQuery):
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    try:
+        page = int(parts[2])
+    except ValueError:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    await _render_serials_page(callback, page=page)
+
+
+@router.callback_query(F.data.startswith("admin:serial:"))
+async def admin_serial_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    try:
+        serial_id = int(parts[2])
+    except ValueError:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    serial = get_serial_by_id(serial_id)
+    if not serial:
+        await callback.answer("Serial topilmadi.", show_alert=True)
+        return
+    ok = await _show_serial_parts(callback.message, serial["id"], serial["title"])
+    if not ok:
+        await callback.answer("Serialda qismlar yo'q.", show_alert=True)
+
 @router.callback_query(F.data.startswith("admin:users:"))
 async def admin_users_page_callback(callback: CallbackQuery):
     parts = callback.data.split(":")
@@ -504,11 +567,40 @@ async def _render_users_page(callback: CallbackQuery, page: int) -> None:
     end = start + USERS_PER_PAGE
     page_users = users[start:end]
     header = f"Foydalanuvchilar: {total} ta"
-    body = "\n".join(str(user_id) for user_id in page_users)
+    body = "\n".join(
+        user.get("username") or str(user.get("user_id"))
+        for user in page_users
+    )
     text = f"{header}\n{body}"
     await callback.message.edit_text(
         text,
         reply_markup=users_keyboard(page, total_pages),
+    )
+
+
+async def _render_serials_page(callback: CallbackQuery, page: int) -> None:
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    serials = get_serials()
+    if not serials:
+        await callback.message.edit_text("Seriallar yo'q.", reply_markup=admin_back_keyboard())
+        return
+    total = len(serials)
+    total_pages = max(1, (total + SERIALS_PER_PAGE - 1) // SERIALS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * SERIALS_PER_PAGE
+    end = start + SERIALS_PER_PAGE
+    page_serials = serials[start:end]
+    header = f"Seriallar: {total} ta"
+    body = "\n".join(
+        f"{item.get('code')} - {item.get('title')}"
+        for item in page_serials
+    )
+    text = f"{header}\n{body}"
+    await callback.message.edit_text(
+        text,
+        reply_markup=serials_list_keyboard(page_serials, page, total_pages),
     )
 
 
@@ -539,6 +631,7 @@ async def admin_help_callback(callback: CallbackQuery):
         "/addpart <serial_nomi|kod>\n"
         "/part <qism_raqami>\n"
         "Admin panel -> Loglar\n"
+        "Admin panel -> Seriallar\n"
         "Admin panel -> Foydalanuvchilar\n"
         "/log <user_id|@username>\n"
     )
@@ -784,12 +877,15 @@ async def del_movie_disabled(message: Message, command: CommandObject):
     await message.answer("Kino funksiyalari o'chirilgan.")
 
 
-@router.message(F.text & ~F.text.startswith("/"))
+@router.message(
+    lambda message: (
+        message.text
+        and not message.text.startswith("/")
+        and is_admin(message.from_user.id)
+        and message.from_user.id in LOG_QUERY_ADMINS
+    )
+)
 async def admin_log_text_handler(message: Message):
-    if not is_admin(message.from_user.id):
-        return
-    if message.from_user.id not in LOG_QUERY_ADMINS:
-        return
     if get_serial_session(message.from_user.id):
         return
     raw = message.text.strip()
@@ -959,6 +1055,14 @@ async def _send_serial_part(message: Message, serial_id: int, part: int) -> bool
         await _safe_send_document(message, item["file_id"], caption)
     else:
         await _safe_send_video(message, item["file_id"], caption)
+    serial = get_serial_by_id(serial_id)
+    if serial:
+        share_link = await _get_share_link(message.bot, serial["code"])
+        if share_link:
+            await message.answer(
+                "Do'stlarga ulashing:",
+                reply_markup=share_keyboard(share_link),
+            )
     return True
 
 

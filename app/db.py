@@ -135,7 +135,8 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY
+                user_id INTEGER PRIMARY KEY,
+                username TEXT
             )
             """
         )
@@ -144,6 +145,7 @@ def init_db() -> None:
         _ensure_column(conn, "movie_items", "source_message_id", "INTEGER")
         _ensure_column(conn, "upload_sessions", "status_message_id", "INTEGER")
         _ensure_column(conn, "upload_sessions", "allow_more", "INTEGER")
+        _ensure_column(conn, "users", "username", "TEXT")
         _migrate_movies(conn)
         conn.commit()
 
@@ -295,6 +297,14 @@ def get_serial_by_id(serial_id: int) -> Optional[Dict[str, object]]:
         )
         row = cur.fetchone()
         return dict(row) if row else None
+
+
+def get_serials() -> List[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT id, code, title, created_at FROM serials ORDER BY code ASC"
+        )
+        return [dict(row) for row in cur.fetchall()]
 
 
 def add_serial_part(
@@ -498,19 +508,26 @@ def get_recent_days(limit: int = 7) -> List[Tuple[str, int]]:
         return [(row["day"], row["total"]) for row in cur.fetchall()]
 
 
-def add_user(user_id: int) -> None:
+def add_user(user_id: int, username: Optional[str] = None) -> None:
     with _connect() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO users (user_id) VALUES (?)",
-            (user_id,),
+            "INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)",
+            (user_id, username or ""),
         )
+        if username:
+            conn.execute(
+                "UPDATE users SET username = ? WHERE user_id = ?",
+                (username, user_id),
+            )
         conn.commit()
 
 
-def get_users() -> List[int]:
+def get_users() -> List[Dict[str, object]]:
     with _connect() as conn:
-        cur = conn.execute("SELECT user_id FROM users ORDER BY user_id")
-        return [row["user_id"] for row in cur.fetchall()]
+        cur = conn.execute(
+            "SELECT user_id, username FROM users ORDER BY user_id"
+        )
+        return [dict(row) for row in cur.fetchall()]
 
 
 def save_upload_session(

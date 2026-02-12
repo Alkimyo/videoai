@@ -15,6 +15,7 @@ python -m app
 - Add serial: `/addserial` (inline buttons)
 - Add serial part: `/addpart <serial_name|code>` then send video/document
 - Send serial: `/serial <name|code>` (numeric codes or title)
+- Share serial: `https://t.me/<bot_username>?start=<serial_code>`
 - Admin panel: `/admin` (inline buttons)
 - Broadcast: `/broadcast <text>` or reply with image/video
 

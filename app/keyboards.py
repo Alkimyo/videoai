@@ -25,6 +25,7 @@ def admin_panel_keyboard():
     kb = InlineKeyboardBuilder()
     kb.button(text="Adminlar", callback_data="admin:admins")
     kb.button(text="Kanallar", callback_data="admin:channels")
+    kb.button(text="Seriallar", callback_data="admin:serials")
     kb.button(text="Admin qo'shish", callback_data="admin:addadmin")
     kb.button(text="Admin o'chirish", callback_data="admin:deladmin")
     kb.button(text="Kanal qo'shish", callback_data="admin:addchannel")
@@ -113,4 +114,42 @@ def users_keyboard(page: int, total_pages: int):
     if page + 1 < total_pages:
         kb.button(text=">", callback_data=f"admin:users:{page + 1}")
     kb.adjust(3)
+    return kb.as_markup()
+
+
+def share_keyboard(share_link: str):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="Ulashish", url=share_link)
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def serials_list_keyboard(serials: Iterable[dict], page: int, total_pages: int):
+    kb = InlineKeyboardBuilder()
+    for item in serials:
+        title = item.get("title") or ""
+        short_title = title if len(title) <= 32 else f"{title[:29]}..."
+        text = f"{item.get('code')} - {short_title}"
+        kb.button(text=text, callback_data=f"admin:serial:{item.get('id')}")
+    kb.adjust(1)
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text="<",
+                callback_data=f"admin:serials:{page - 1}",
+            )
+        )
+    nav_buttons.append(
+        InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="noop")
+    )
+    if page + 1 < total_pages:
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text=">",
+                callback_data=f"admin:serials:{page + 1}",
+            )
+        )
+    if nav_buttons:
+        kb.row(*nav_buttons)
     return kb.as_markup()
