@@ -1539,7 +1539,7 @@ async def restore_db_callback(callback: CallbackQuery):
     try:
         if os.path.exists(DB_PATH):
             shutil.copy2(DB_PATH, backup_path)
-        os.replace(db_path, DB_PATH)
+        shutil.move(db_path, DB_PATH)
         init_db()
     except Exception as exc:
         _log_event("restore_db_error", callback.from_user.id, f"error={exc}")
