@@ -171,3 +171,11 @@ def serials_list_keyboard(serials: Iterable[dict], page: int, total_pages: int):
         kb.row(*nav_buttons)
     kb.row(InlineKeyboardButton(text="Ortga", callback_data="admin:back"))
     return kb.as_markup()
+
+
+def post_media_keyboard():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="Rasmsiz", callback_data="post:skip")
+    kb.button(text="Bekor", callback_data="post:cancel")
+    kb.adjust(2)
+    return kb.as_markup()

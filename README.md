@@ -20,6 +20,8 @@ python -m app
 - Stats: `/stats` (admin)
 - Backup: `/backup` (admin, DB + log zip)
 - Log file: `/logfile` (admin)
+- Restore DB: `/restoredb` (owner, upload zip/db), cancel with `/cancelrestore`
+- Post template: `/post <serial_code>` (admin, optional image)
 - Broadcast: `/broadcast <text>` or reply with image/video
 
 `SOURCE_CHANNEL_ID` must be set for serial uploads.

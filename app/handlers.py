@@ -1,6 +1,9 @@
 import asyncio
 import datetime as dt
 import os
+import shutil
+import tempfile
+import urllib.parse
 import zipfile
 from collections import deque
 from typing import Optional
@@ -10,6 +13,7 @@ from aiogram.enums import ChatMemberStatus
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import CallbackQuery, ChatJoinRequest, FSInputFile, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.config import DB_PATH, LOG_PATH, OWNER_ID, SOURCE_CHANNEL_ID
 from app.db import (
@@ -31,6 +35,7 @@ from app.db import (
     get_serial_parts,
     get_serial_session,
     get_serials,
+    init_db,
     is_admin,
     serial_part_exists,
     save_serial_session,
@@ -48,6 +53,7 @@ from app.keyboards import (
     admin_panel_keyboard,
     admin_permissions_keyboard,
     log_cancel_keyboard,
+    post_media_keyboard,
     serial_cancel_keyboard,
     serial_flow_keyboard,
     serial_parts_keyboard,
@@ -62,6 +68,8 @@ SERIALS_PER_PAGE = 20
 USERS_PER_PAGE = 20
 LOG_QUERY_ADMINS: set[int] = set()
 ADMIN_ADD_SESSIONS: dict[int, dict[str, object]] = {}
+RESTORE_DB_SESSIONS: dict[int, dict[str, object]] = {}
+POST_SESSIONS: dict[int, dict[str, object]] = {}
 ADMIN_PERMISSION_LABELS = {
     "can_manage_admins": "Adminlarni boshqarish",
     "can_manage_channels": "Kanallarni boshqarish",
@@ -100,6 +108,20 @@ def _format_perm_inline(perms: dict[str, int]) -> str:
         label = ADMIN_PERMISSION_LABELS.get(key, key)
         parts.append(f"{label}:{icon}")
     return ", ".join(parts)
+
+
+def _cleanup_restore_session(user_id: int) -> None:
+    session = RESTORE_DB_SESSIONS.pop(user_id, None)
+    if not session:
+        return
+    for path in session.get("cleanup", []):
+        try:
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+        except Exception:
+            pass
 
 router = Router()
 LOG_TAIL_LINES = 40
@@ -330,7 +352,31 @@ async def _get_share_link(bot, serial_code: int) -> Optional[str]:
         return None
     if not me.username:
         return None
+    target_url = f"https://t.me/{me.username}?start={serial_code}"
+    share_url = (
+        "https://t.me/share/url?"
+        f"url={urllib.parse.quote(target_url)}"
+        f"&text={urllib.parse.quote('Serialni ochish uchun link')}"
+    )
+    return share_url
+
+
+async def _get_start_link(bot, serial_code: int) -> Optional[str]:
+    try:
+        me = await bot.get_me()
+    except Exception:
+        return None
+    if not me.username:
+        return None
     return f"https://t.me/{me.username}?start={serial_code}"
+
+
+def _build_serial_post_text(title: str, parts_count: int, link: str) -> str:
+    return (
+        f"Drama nomi: {title}\n"
+        f"Qismlar soni: {parts_count}\n"
+        f"Dramani ko'rish: {link}"
+    )
 
 
 def _build_backup_zip() -> Optional[str]:
@@ -806,6 +852,9 @@ async def admin_help_callback(callback: CallbackQuery):
         "/logfile\n"
         "/stats\n"
         "/backup\n"
+        "/restoredb\n"
+        "/cancelrestore\n"
+        "/post <serial_kod>\n"
     )
     await callback.message.edit_text(text, reply_markup=admin_back_keyboard())
 
@@ -998,6 +1047,87 @@ async def admin_broadcast_callback(callback: CallbackQuery):
         "Foydalanish: /broadcast <text> yoki reply bilan yuboring.",
         reply_markup=admin_back_keyboard(),
     )
+
+
+@router.message(Command("restoredb"))
+async def restore_db_handler(message: Message):
+    if message.from_user.id != OWNER_ID:
+        await message.answer("Bu buyruq faqat owner uchun.")
+        return
+    RESTORE_DB_SESSIONS[message.from_user.id] = {
+        "state": "await_file",
+        "cleanup": [],
+    }
+    await message.answer("Backup zip yoki bot.db faylni yuboring. Bekor qilish: /cancelrestore")
+    _log_event("restore_db_start", message.from_user.id)
+
+
+@router.message(Command("post"))
+async def post_handler(message: Message, command: CommandObject):
+    if not _has_perm(message.from_user.id, "can_view_lists"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    if not command.args:
+        await message.answer("Foydalanish: /post <serial_kod>")
+        return
+    code = _parse_code(command.args)
+    if not code:
+        await message.answer("Kod faqat raqam bo'lishi kerak.")
+        return
+    serial = get_serial_by_code(int(code))
+    if not serial:
+        await message.answer("Serial topilmadi.")
+        return
+    parts_count = len(get_serial_parts(serial["id"]))
+    POST_SESSIONS[message.from_user.id] = {
+        "serial_id": serial["id"],
+        "title": serial["title"],
+        "code": serial["code"],
+        "parts_count": parts_count,
+    }
+    await message.answer(
+        "Rasm yuboring yoki \"Rasmsiz\" tugmasini bosing.",
+        reply_markup=post_media_keyboard(),
+    )
+    _log_event("post_start", message.from_user.id, f"serial_id={serial['id']}")
+
+
+@router.callback_query(F.data.startswith("post:"))
+async def post_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_view_lists"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    session = POST_SESSIONS.get(callback.from_user.id)
+    if not session:
+        await callback.answer("Sessiya topilmadi.", show_alert=True)
+        return
+    action = callback.data.split(":")[-1]
+    if action == "cancel":
+        POST_SESSIONS.pop(callback.from_user.id, None)
+        await callback.message.edit_text("Post yaratish bekor qilindi.")
+        _log_event("post_cancel", callback.from_user.id)
+        return
+    if action != "skip":
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    link = await _get_share_link(callback.bot, int(session["code"]))
+    if not link:
+        await callback.message.edit_text("Bot linkini olishda xatolik.")
+        return
+    text = _build_serial_post_text(session["title"], session["parts_count"], link)
+    POST_SESSIONS.pop(callback.from_user.id, None)
+    await callback.message.edit_text(text)
+    _log_event("post_created", callback.from_user.id, f"serial_id={session['serial_id']}")
+
+
+@router.message(Command("cancelrestore"))
+async def cancel_restore_handler(message: Message):
+    if message.from_user.id != OWNER_ID:
+        await message.answer("Bu buyruq faqat owner uchun.")
+        return
+    _cleanup_restore_session(message.from_user.id)
+    await message.answer("DB tiklash bekor qilindi.")
+    _log_event("restore_db_cancel", message.from_user.id)
 
 
 @router.message(Command("addchannel"))
@@ -1247,6 +1377,10 @@ async def admin_serial_text_handler(message: Message):
 async def admin_serial_media_handler(message: Message):
     if not is_admin(message.from_user.id):
         return
+    if message.from_user.id in RESTORE_DB_SESSIONS:
+        return
+    if message.from_user.id in POST_SESSIONS:
+        return
     if not _has_perm(message.from_user.id, "can_add_part"):
         await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
@@ -1258,9 +1392,8 @@ async def admin_serial_media_handler(message: Message):
         await message.answer("Serial topilmadi. /addserial yoki /addpart ishlating.")
         return
     part = session.get("next_part") or 1
-    if serial_part_exists(serial_id, part):
-        await message.answer("Bu qism allaqachon mavjud. /part <raqam> bilan tanlang.")
-        return
+    while serial_part_exists(serial_id, part):
+        part += 1
     file_id, file_type, caption = _extract_media(message)
     if not file_id:
         await message.answer("Faqat video yoki document qabul qilinadi.")
@@ -1306,6 +1439,122 @@ async def admin_serial_media_handler(message: Message):
     )
 
 
+@router.message(F.document)
+async def restore_db_document_handler(message: Message):
+    if message.from_user.id != OWNER_ID:
+        return
+    session = RESTORE_DB_SESSIONS.get(message.from_user.id)
+    if not session or session.get("state") != "await_file":
+        return
+    document = message.document
+    if not document:
+        return
+    filename = (document.file_name or "").lower()
+    if not (filename.endswith(".db") or filename.endswith(".zip")):
+        await message.answer("Faqat .db yoki .zip fayl yuboring.")
+        return
+    temp_dir = tempfile.mkdtemp(prefix="serialbot-restore-")
+    RESTORE_DB_SESSIONS[message.from_user.id]["cleanup"].append(temp_dir)
+    download_path = os.path.join(temp_dir, document.file_name or "upload.db")
+    try:
+        file = await message.bot.get_file(document.file_id)
+        await message.bot.download_file(file.file_path, download_path)
+    except Exception:
+        await message.answer("Faylni yuklab bo'lmadi.")
+        return
+    db_path = None
+    if filename.endswith(".db"):
+        db_path = download_path
+    else:
+        try:
+            with zipfile.ZipFile(download_path, "r") as archive:
+                candidate = None
+                for name in archive.namelist():
+                    if name.lower().endswith("bot.db"):
+                        candidate = name
+                        break
+                if not candidate:
+                    await message.answer("Zip ichida bot.db topilmadi.")
+                    return
+                with archive.open(candidate) as src:
+                    db_path = os.path.join(temp_dir, "bot.db")
+                    with open(db_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+        except Exception:
+            await message.answer("Zip faylni ochib bo'lmadi.")
+            return
+    if not db_path or not os.path.exists(db_path):
+        await message.answer("DB fayl topilmadi.")
+        return
+    RESTORE_DB_SESSIONS[message.from_user.id]["state"] = "await_confirm"
+    RESTORE_DB_SESSIONS[message.from_user.id]["db_path"] = db_path
+    kb = InlineKeyboardBuilder()
+    kb.button(text="Tasdiqlash", callback_data="restoredb:confirm")
+    kb.button(text="Bekor qilish", callback_data="restoredb:cancel")
+    kb.adjust(2)
+    await message.answer(
+        "DB tiklashni tasdiqlaysizmi? Hozirgi baza almashtiriladi.",
+        reply_markup=kb.as_markup(),
+    )
+
+
+@router.callback_query(F.data.startswith("restoredb:"))
+async def restore_db_callback(callback: CallbackQuery):
+    if callback.from_user.id != OWNER_ID:
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    session = RESTORE_DB_SESSIONS.get(callback.from_user.id)
+    if not session or session.get("state") != "await_confirm":
+        await callback.answer("Sessiya topilmadi.", show_alert=True)
+        return
+    action = callback.data.split(":")[-1]
+    if action == "cancel":
+        _cleanup_restore_session(callback.from_user.id)
+        await callback.message.edit_text("DB tiklash bekor qilindi.")
+        _log_event("restore_db_cancel", callback.from_user.id)
+        return
+    if action != "confirm":
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    db_path = session.get("db_path")
+    if not db_path or not os.path.exists(db_path):
+        await callback.message.edit_text("DB fayl topilmadi.")
+        _cleanup_restore_session(callback.from_user.id)
+        return
+    backup_path = os.path.join(
+        "/tmp",
+        f"serialbot-db-backup-{dt.datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.db",
+    )
+    try:
+        if os.path.exists(DB_PATH):
+            shutil.copy2(DB_PATH, backup_path)
+        os.replace(db_path, DB_PATH)
+        init_db()
+    except Exception:
+        await callback.message.edit_text("DB tiklashda xatolik.")
+        _cleanup_restore_session(callback.from_user.id)
+        return
+    _cleanup_restore_session(callback.from_user.id)
+    await callback.message.edit_text("DB tiklandi.")
+    _log_event("restore_db_success", callback.from_user.id, f"backup={backup_path}")
+
+
+@router.message(F.photo)
+async def post_photo_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_view_lists"):
+        return
+    session = POST_SESSIONS.get(message.from_user.id)
+    if not session:
+        return
+    link = await _get_share_link(message.bot, int(session["code"]))
+    if not link:
+        await message.answer("Bot linkini olishda xatolik.")
+        return
+    text = _build_serial_post_text(session["title"], session["parts_count"], link)
+    photo = message.photo[-1]
+    await message.answer_photo(photo.file_id, caption=text)
+    POST_SESSIONS.pop(message.from_user.id, None)
+    _log_event("post_created", message.from_user.id, f"serial_id={session['serial_id']}")
 async def _show_serial_parts(message: Message, serial_id: int) -> bool:
     parts = get_serial_parts(serial_id)
     if not parts:
