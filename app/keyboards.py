@@ -179,3 +179,10 @@ def post_media_keyboard():
     kb.button(text="Bekor", callback_data="post:cancel")
     kb.adjust(2)
     return kb.as_markup()
+
+
+def post_link_keyboard(link: str):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="Dramani ko'rish", url=link)
+    kb.adjust(1)
+    return kb.as_markup()

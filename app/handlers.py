@@ -53,6 +53,7 @@ from app.keyboards import (
     admin_panel_keyboard,
     admin_permissions_keyboard,
     log_cancel_keyboard,
+    post_link_keyboard,
     post_media_keyboard,
     serial_cancel_keyboard,
     serial_flow_keyboard,
@@ -1120,7 +1121,7 @@ async def post_callback(callback: CallbackQuery):
         return
     text = _build_serial_post_text(session["title"], session["parts_count"], link)
     POST_SESSIONS.pop(callback.from_user.id, None)
-    await callback.message.edit_text(text)
+    await callback.message.edit_text(text, reply_markup=post_link_keyboard(link))
     _log_event("post_created", callback.from_user.id, f"serial_id={session['serial_id']}")
 
 
@@ -1564,7 +1565,11 @@ async def post_photo_handler(message: Message):
         return
     text = _build_serial_post_text(session["title"], session["parts_count"], link)
     photo = message.photo[-1]
-    await message.answer_photo(photo.file_id, caption=text)
+    await message.answer_photo(
+        photo.file_id,
+        caption=text,
+        reply_markup=post_link_keyboard(link),
+    )
     POST_SESSIONS.pop(message.from_user.id, None)
     _log_event("post_created", message.from_user.id, f"serial_id={session['serial_id']}")
 async def _show_serial_parts(message: Message, serial_id: int) -> bool:
