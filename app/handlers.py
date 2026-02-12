@@ -10,25 +10,18 @@ from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, ChatJoinRequest, Message
 
-from app.config import LOG_PATH, MAX_MOVIES_PER_CODE, OWNER_ID, SOURCE_CHANNEL_ID
+from app.config import LOG_PATH, OWNER_ID, SOURCE_CHANNEL_ID
 from app.db import (
     add_admin,
     add_channel,
-    add_movie,
     add_serial,
     add_serial_part,
     add_join_request,
     add_user,
-    count_movies_for_code,
     del_admin,
     del_channel,
-    del_movie,
     get_admins,
     get_channels,
-    get_day_stats,
-    get_movie_items,
-    get_next_code,
-    get_recent_days,
     get_serial_by_code,
     get_serial_by_id,
     get_serial_by_title,
@@ -41,7 +34,6 @@ from app.db import (
     clear_serial_session,
     get_users,
     has_join_request,
-    record_view,
 )
 from app.keyboards import (
     admin_back_keyboard,
@@ -60,7 +52,6 @@ USERS_PER_PAGE = 20
 LOG_QUERY_ADMINS: set[int] = set()
 
 router = Router()
-SEND_DELAY_SECONDS = 0.7
 LOG_TAIL_LINES = 40
 
 
@@ -102,14 +93,14 @@ async def check_subs_callback(callback: CallbackQuery):
     channels = get_channels()
     ok = await _check_subscriptions(callback.bot, callback.from_user.id, channels)
     if ok:
-        await callback.message.edit_text("Obuna tasdiqlandi. Kino kodini yuboring.")
+        await callback.message.edit_text("Obuna tasdiqlandi. Serial kodini yuboring.")
     else:
         await callback.answer("Hali obuna emassiz.", show_alert=True)
 
 
 @router.callback_query(F.data == "user:sendcode")
 async def user_send_code_callback(callback: CallbackQuery):
-    await callback.message.edit_text("Kino kodini yuboring.")
+    await callback.message.edit_text("Serial kodini yuboring.")
 
 
 @router.callback_query(F.data == "noop")
@@ -178,14 +169,6 @@ async def serial_page_callback(callback: CallbackQuery):
             per_page=SERIAL_PARTS_PER_PAGE,
         ),
     )
-
-
-def _today() -> str:
-    return dt.datetime.utcnow().date().isoformat()
-
-
-def _generate_code() -> str:
-    return str(get_next_code())
 
 
 def _parse_code(raw: str) -> Optional[str]:
@@ -325,9 +308,9 @@ async def start_handler(message: Message):
         return
     banner = (
         "====================\n"
-        "   K I N O  B O T\n"
+        "   S E R I A L  B O T\n"
         "====================\n"
-        "Kino kodini yuboring."
+        "Serial kodini yuboring."
     )
     await message.answer(banner, reply_markup=user_keyboard())
 
@@ -345,11 +328,7 @@ async def help_handler(message: Message):
         "/addchannel <@username|chat_id> [invite_link] - majburiy kanal qo'shish\n"
         "/delchannel <@username|chat_id> - kanalni chiqarish\n"
         "/channels - kanallar ro'yxati\n"
-        "/addmovie [code] - video ustidan reply qilib qo'shish\n"
-        "/delmovie <code> - kino o'chirish\n"
-        "/movie <code> - kinoni yuborish\n"
         "/serial <nom|kod> - serialni yuborish\n"
-        "/stats - kunlik ko'rishlar\n"
         "/broadcast <text> - barchaga xabar (admin)\n"
         "/broadcast - reply bilan rasm/video yuborish\n"
     )
@@ -488,17 +467,7 @@ async def admin_stats_callback(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
-    day = _today()
-    total, top = get_day_stats(day)
-    lines = [f"Bugungi ko'rishlar: {total}"]
-    if top:
-        lines.append("Top kino kodlari:")
-        lines.extend([f"{code} - {count}" for code, count in top])
-    recent = get_recent_days()
-    if recent:
-        lines.append("So'nggi kunlar:")
-        lines.extend([f"{d}: {c}" for d, c in recent])
-    await callback.message.edit_text("\n".join(lines), reply_markup=admin_back_keyboard())
+    await callback.message.edit_text("Statistika o'chirilgan.", reply_markup=admin_back_keyboard())
 
 
 @router.callback_query(F.data == "admin:users")
@@ -566,15 +535,12 @@ async def admin_help_callback(callback: CallbackQuery):
         "/deladmin <user_id>\n"
         "/addchannel <@username|chat_id> [invite_link]\n"
         "/delchannel <@username|chat_id>\n"
-        "/addmovie [code] (reply)\n"
         "/addserial (inline)\n"
         "/addpart <serial_nomi|kod>\n"
         "/part <qism_raqami>\n"
-        "/delmovie <code>\n"
         "Admin panel -> Loglar\n"
         "Admin panel -> Foydalanuvchilar\n"
         "/log <user_id|@username>\n"
-        "/stats\n"
     )
     await callback.message.edit_text(text, reply_markup=admin_back_keyboard())
 
@@ -629,7 +595,7 @@ async def admin_addmovie_callback(callback: CallbackQuery):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     await callback.message.edit_text(
-        "Reply qiling va yuboring: /addmovie [code]",
+        "Kino funksiyalari o'chirilgan.",
         reply_markup=admin_back_keyboard(),
     )
 
@@ -667,7 +633,7 @@ async def admin_delmovie_callback(callback: CallbackQuery):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     await callback.message.edit_text(
-        "Foydalanish: /delmovie <code>",
+        "Kino funksiyalari o'chirilgan.",
         reply_markup=admin_back_keyboard(),
     )
 
@@ -751,58 +717,6 @@ async def list_channels_handler(message: Message):
     await message.answer(text)
 
 
-@router.message(Command("addmovie"))
-async def add_movie_handler(message: Message, command: CommandObject):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bu buyruq faqat adminlar uchun.")
-        return
-    if not SOURCE_CHANNEL_ID:
-        await message.answer("SOURCE_CHANNEL_ID sozlanmagan.")
-        return
-    if command.args:
-        code = _parse_code(command.args)
-        if not code:
-            await message.answer("Kod faqat raqam bo'lishi kerak.")
-            return
-    else:
-        code = _generate_code()
-
-    if not message.reply_to_message:
-        await message.answer("Video/document ustidan reply qiling.")
-        return
-
-    if count_movies_for_code(code) >= MAX_MOVIES_PER_CODE:
-        await message.answer("Bu kod band.")
-        return
-
-    reply = message.reply_to_message
-    file_id, file_type, caption = _extract_media(reply)
-
-    if not file_id:
-        await message.answer("Faqat video yoki document qabul qilinadi.")
-        return
-
-    msg = await _safe_send_to_channel(
-        message.bot,
-        SOURCE_CHANNEL_ID,
-        file_id,
-        file_type,
-        caption,
-    )
-    if not msg:
-        await message.answer("Kanalga yuklab bo'lmadi.")
-        return
-    add_movie(
-        code,
-        file_id,
-        file_type,
-        caption or "",
-        source_chat_id=msg.chat.id,
-        source_message_id=msg.message_id,
-    )
-    await message.answer(f"Kino saqlandi. Kod: {code}")
-
-
 @router.message(Command("addpart"))
 async def add_part_handler(message: Message, command: CommandObject):
     if not is_admin(message.from_user.id):
@@ -860,20 +774,14 @@ async def set_part_handler(message: Message, command: CommandObject):
     await message.answer(prompt, reply_markup=serial_flow_keyboard())
 
 
+@router.message(Command("addmovie"))
+async def add_movie_disabled(message: Message, command: CommandObject):
+    await message.answer("Kino funksiyalari o'chirilgan.")
+
+
 @router.message(Command("delmovie"))
-async def del_movie_handler(message: Message, command: CommandObject):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bu buyruq faqat adminlar uchun.")
-        return
-    if not command.args:
-        await message.answer("Foydalanish: /delmovie <code>")
-        return
-    code = _parse_code(command.args)
-    if not code:
-        await message.answer("Kod faqat raqam bo'lishi kerak.")
-        return
-    del_movie(code)
-    await message.answer("Kino o'chirildi.")
+async def del_movie_disabled(message: Message, command: CommandObject):
+    await message.answer("Kino funksiyalari o'chirilgan.")
 
 
 @router.message(F.text & ~F.text.startswith("/"))
@@ -1014,44 +922,6 @@ async def admin_serial_media_handler(message: Message):
     )
 
 
-async def _send_movie(message: Message, code: str) -> bool:
-    items = get_movie_items(code)
-    if not items:
-        return False
-    progress = None
-    if len(items) > 1:
-        progress = await message.answer(f"Yuborilmoqda: 0/{len(items)}")
-    for idx, item in enumerate(items, start=1):
-        caption = item.get("caption") or None
-        source_chat_id = item.get("source_chat_id")
-        source_message_id = item.get("source_message_id")
-        if source_chat_id and source_message_id:
-            await _safe_copy_message(
-                message.bot,
-                message.chat.id,
-                source_chat_id,
-                source_message_id,
-            )
-        elif item.get("file_type") == "document":
-            await _safe_send_document(message, item["file_id"], caption)
-        else:
-            await _safe_send_video(message, item["file_id"], caption)
-        await asyncio.sleep(SEND_DELAY_SECONDS)
-        if progress:
-            try:
-                await progress.edit_text(f"Yuborilmoqda: {idx}/{len(items)}")
-            except Exception:
-                pass
-    record_view(_today(), str(code))
-    _log_event("movie_sent", message.from_user.id, f"code={code}")
-    if progress:
-        try:
-            await progress.edit_text("Yuborildi.")
-        except Exception:
-            pass
-    return True
-
-
 async def _show_serial_parts(message: Message, serial_id: int, title: str) -> bool:
     parts = get_serial_parts(serial_id)
     if not parts:
@@ -1093,18 +963,8 @@ async def _send_serial_part(message: Message, serial_id: int, part: int) -> bool
 
 
 @router.message(Command("movie"))
-async def movie_command_handler(message: Message, command: CommandObject):
-    if not await ensure_subscribed(message):
-        return
-    if not command.args:
-        await message.answer("Foydalanish: /movie <code>")
-        return
-    code = _parse_code(command.args)
-    if not code:
-        await message.answer("Kod faqat raqam bo'lishi kerak.")
-        return
-    if not await _send_movie(message, code):
-        await message.answer("Kino topilmadi.")
+async def movie_command_disabled(message: Message, command: CommandObject):
+    await message.answer("Kino funksiyalari o'chirilgan.")
 
 
 @router.message(Command("serial"))
@@ -1134,40 +994,20 @@ async def movie_text_handler(message: Message):
     if is_admin(message.from_user.id) and get_serial_session(message.from_user.id):
         return
     raw = message.text.strip()
-    if raw == "Kino kodini yuborish":
-        await message.answer("Kino kodini yuboring.")
+    if raw == "Serial kodini yuborish":
+        await message.answer("Serial kodini yuboring.")
         return
     code = _parse_code(raw)
     if code:
-        if await _send_movie(message, code):
-            return
         serial = get_serial_by_code(int(code))
         if serial and await _show_serial_parts(message, serial["id"], serial["title"]):
             return
-        await message.answer("Kino yoki serial topilmadi.")
+        await message.answer("Serial topilmadi.")
         return
     serial = get_serial_by_title(raw)
     if serial and await _show_serial_parts(message, serial["id"], serial["title"]):
         return
-    await message.answer("Kino yoki serial topilmadi.")
-
-
-@router.message(Command("stats"))
-async def stats_handler(message: Message):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bu buyruq faqat adminlar uchun.")
-        return
-    day = _today()
-    total, top = get_day_stats(day)
-    lines = [f"Bugungi ko'rishlar: {total}"]
-    if top:
-        lines.append("Top kino kodlari:")
-        lines.extend([f"{code} - {count}" for code, count in top])
-    recent = get_recent_days()
-    if recent:
-        lines.append("So'nggi kunlar:")
-        lines.extend([f"{d}: {c}" for d, c in recent])
-    await message.answer("\n".join(lines))
+    await message.answer("Serial topilmadi.")
 
 
 @router.message(Command("log"))

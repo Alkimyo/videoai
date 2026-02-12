@@ -29,14 +29,11 @@ def admin_panel_keyboard():
     kb.button(text="Admin o'chirish", callback_data="admin:deladmin")
     kb.button(text="Kanal qo'shish", callback_data="admin:addchannel")
     kb.button(text="Kanal o'chirish", callback_data="admin:delchannel")
-    kb.button(text="Kino qo'shish", callback_data="admin:addmovie")
-    kb.button(text="Kino o'chirish", callback_data="admin:delmovie")
     kb.button(text="Serial qo'shish", callback_data="admin:addserial")
     kb.button(text="Qism qo'shish", callback_data="admin:addpart")
     kb.button(text="E'lon yuborish", callback_data="admin:broadcast")
     kb.button(text="Loglar", callback_data="admin:logs")
     kb.button(text="Foydalanuvchilar", callback_data="admin:users")
-    kb.button(text="Statistika", callback_data="admin:stats")
     kb.button(text="Yordam", callback_data="admin:help")
     kb.adjust(2)
     return kb.as_markup()
@@ -50,7 +47,7 @@ def admin_back_keyboard():
 
 def user_keyboard():
     kb = InlineKeyboardBuilder()
-    kb.button(text="Kod yuborish", callback_data="user:sendcode")
+    kb.button(text="Serial kodini yuborish", callback_data="user:sendcode")
     kb.adjust(1)
     return kb.as_markup()
 

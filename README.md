@@ -1,4 +1,4 @@
-# Kinobot (aiogram)
+# Serialbot (aiogram)
 
 ## Run
 
@@ -12,14 +12,13 @@ python -m app
 - Add mandatory channels: `/addchannel @channelname` or `/addchannel -100...`
 - Private channel: `/addchannel -100... <invite_link>`
 - Remove channel: `/delchannel @channelname` or `/delchannel -100...`
-- Add movie: reply to a video/document and run `/addmovie [code]`
-- Send movie: user sends `CODE` or `/movie CODE` (numeric codes)
-- One code can have multiple videos; repeat `/addmovie 3` up to `MAX_MOVIES_PER_CODE` (default 1)
+- Add serial: `/addserial` (inline buttons)
+- Add serial part: `/addpart <serial_name|code>` then send video/document
+- Send serial: `/serial <name|code>` (numeric codes or title)
 - Admin panel: `/admin` (inline buttons)
-- Stats: `/stats`
 - Broadcast: `/broadcast <text>` or reply with image/video
 
-`SOURCE_CHANNEL_ID` must be set for movie uploads.
+`SOURCE_CHANNEL_ID` must be set for serial uploads.
 
 ## Web page
 
