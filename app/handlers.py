@@ -1541,7 +1541,8 @@ async def restore_db_callback(callback: CallbackQuery):
             shutil.copy2(DB_PATH, backup_path)
         os.replace(db_path, DB_PATH)
         init_db()
-    except Exception:
+    except Exception as exc:
+        _log_event("restore_db_error", callback.from_user.id, f"error={exc}")
         await callback.message.edit_text("DB tiklashda xatolik.")
         _cleanup_restore_session(callback.from_user.id)
         return
