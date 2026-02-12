@@ -1373,14 +1373,17 @@ async def admin_serial_text_handler(message: Message):
         return
 
 
-@router.message(F.video | F.document)
+@router.message(
+    lambda message: (
+        message
+        and message.from_user
+        and is_admin(message.from_user.id)
+        and message.from_user.id not in RESTORE_DB_SESSIONS
+        and message.from_user.id not in POST_SESSIONS
+    ),
+    F.video | F.document,
+)
 async def admin_serial_media_handler(message: Message):
-    if not is_admin(message.from_user.id):
-        return
-    if message.from_user.id in RESTORE_DB_SESSIONS:
-        return
-    if message.from_user.id in POST_SESSIONS:
-        return
     if not _has_perm(message.from_user.id, "can_add_part"):
         await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
