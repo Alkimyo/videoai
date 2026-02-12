@@ -375,8 +375,7 @@ async def _get_start_link(bot, serial_code: int) -> Optional[str]:
 def _build_serial_post_text(title: str, parts_count: int, link: str) -> str:
     return (
         f"Drama nomi: {title}\n"
-        f"Qismlar soni: {parts_count}\n"
-        f"Dramani ko'rish: {link}"
+        f"Qismlar soni: {parts_count}"
     )
 
 
@@ -1115,7 +1114,7 @@ async def post_callback(callback: CallbackQuery):
     if action != "skip":
         await callback.answer("Xatolik.", show_alert=True)
         return
-    link = await _get_share_link(callback.bot, int(session["code"]))
+    link = await _get_start_link(callback.bot, int(session["code"]))
     if not link:
         await callback.message.edit_text("Bot linkini olishda xatolik.")
         return
@@ -1559,7 +1558,7 @@ async def post_photo_handler(message: Message):
     session = POST_SESSIONS.get(message.from_user.id)
     if not session:
         return
-    link = await _get_share_link(message.bot, int(session["code"]))
+    link = await _get_start_link(message.bot, int(session["code"]))
     if not link:
         await message.answer("Bot linkini olishda xatolik.")
         return
