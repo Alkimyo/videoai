@@ -346,7 +346,12 @@ async def _wait_retry(err: TelegramRetryAfter) -> None:
     await asyncio.sleep(err.retry_after + 0.5)
 
 
-async def _get_share_link(bot, serial_code: int) -> Optional[str]:
+async def _get_share_link(
+    bot,
+    serial_code: int,
+    title: str,
+    parts_count: int,
+) -> Optional[str]:
     try:
         me = await bot.get_me()
     except Exception:
@@ -354,10 +359,16 @@ async def _get_share_link(bot, serial_code: int) -> Optional[str]:
     if not me.username:
         return None
     target_url = f"https://t.me/{me.username}?start={serial_code}"
+    text = (
+        "Men sizga ushbu botni tavsiya qilaman. "
+        f"Siz ushbu botda ushbu link orqali {title} serialini "
+        f"{parts_count} qismini ko'rishingiz mumkin. "
+        "Dramalardan bahramand bo'ling."
+    )
     share_url = (
         "https://t.me/share/url?"
         f"url={urllib.parse.quote(target_url)}"
-        f"&text={urllib.parse.quote('Serialni ochish uchun link')}"
+        f"&text={urllib.parse.quote(text)}"
     )
     return share_url
 
@@ -822,7 +833,7 @@ async def admin_logfile_callback(callback: CallbackQuery):
     if not _has_perm(callback.from_user.id, "can_view_logs"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
-    await callback.message.edit_text("Log fayl yuborilmoqda...")
+    await callback.message.edit_text("Log fayli yuborilmoqda...")
     await _send_log_file(callback.message)
     _log_event("logfile_sent", callback.from_user.id)
 
@@ -843,7 +854,7 @@ async def admin_help_callback(callback: CallbackQuery):
         "/addpart <serial_nomi|kod>\n"
         "/part <qism_raqami>\n"
         "Admin panel -> Loglar\n"
-        "Admin panel -> Log fayl\n"
+        "Admin panel -> Log fayli\n"
         "Admin panel -> Seriallar\n"
         "Admin panel -> Statistika\n"
         "Admin panel -> Backup\n"
@@ -1600,11 +1611,21 @@ async def _send_serial_part(
     serial = get_serial_by_id(serial_id)
     if serial:
         record_serial_view(_today(), int(serial["code"]))
-    share_link = await _get_share_link(message.bot, serial["code"]) if serial else None
     if part_numbers is None:
         parts = get_serial_parts(serial_id)
         part_numbers = [int(row["part"]) for row in parts if row.get("part") is not None]
     part_numbers_sorted = sorted(part_numbers) if part_numbers else []
+    parts_count = len(part_numbers_sorted)
+    share_link = (
+        await _get_share_link(
+            message.bot,
+            int(serial["code"]),
+            serial.get("title") or "",
+            parts_count,
+        )
+        if serial
+        else None
+    )
     page = 0
     if part_numbers_sorted:
         try:
@@ -1714,7 +1735,7 @@ async def _send_log_file(message: Message) -> None:
     if not os.path.exists(LOG_PATH):
         await message.answer("Log fayli topilmadi.")
         return
-    await message.answer_document(FSInputFile(LOG_PATH), caption="Log fayl")
+    await message.answer_document(FSInputFile(LOG_PATH), caption="Log fayli")
 
 
 @router.message(Command("log"))

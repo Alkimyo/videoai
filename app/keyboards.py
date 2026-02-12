@@ -34,7 +34,7 @@ def admin_panel_keyboard():
     kb.button(text="Qism qo'shish", callback_data="admin:addpart")
     kb.button(text="E'lon yuborish", callback_data="admin:broadcast")
     kb.button(text="Loglar", callback_data="admin:logs")
-    kb.button(text="Log fayl", callback_data="admin:logfile")
+    kb.button(text="Log fayli", callback_data="admin:logfile")
     kb.button(text="Foydalanuvchilar", callback_data="admin:users")
     kb.button(text="Statistika", callback_data="admin:stats")
     kb.button(text="Backup", callback_data="admin:backup")
