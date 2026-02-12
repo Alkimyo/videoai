@@ -3,6 +3,8 @@ import contextlib
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher
+from aiogram.dispatcher.middlewares.base import BaseMiddleware
+from aiogram.types import CallbackQuery, Message
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from app.config import (
@@ -14,7 +16,44 @@ from app.config import (
     WEBAPP_PORT,
 )
 from app.db import ensure_owner, init_db
-from app.handlers import router
+from app.handlers import _log_event, router
+
+
+def _safe_text(value: str | None, limit: int = 500) -> str:
+    if not value:
+        return ""
+    text = value.strip()
+    if len(text) > limit:
+        return f"{text[:limit]}..."
+    return text
+
+
+class UserMessageLogMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event: Message, data: dict):
+        if event and event.from_user:
+            username = event.from_user.username or ""
+            text = _safe_text(event.text or event.caption)
+            detail = (
+                f"chat_id={event.chat.id} chat_type={event.chat.type} "
+                f"username={username} msg_type={event.content_type} "
+                f"message_id={event.message_id} text={text}"
+            )
+            _log_event("user_message", event.from_user.id, detail)
+        return await handler(event, data)
+
+
+class UserCallbackLogMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event: CallbackQuery, data: dict):
+        if event and event.from_user:
+            username = event.from_user.username or ""
+            data_text = _safe_text(event.data, limit=200)
+            message_id = event.message.message_id if event.message else "-"
+            detail = (
+                f"chat_id={event.message.chat.id if event.message else '-'} "
+                f"username={username} data={data_text} message_id={message_id}"
+            )
+            _log_event("user_action", event.from_user.id, detail)
+        return await handler(event, data)
 
 
 def _health(_: web.Request) -> web.Response:
@@ -78,6 +117,8 @@ def main() -> None:
 
     bot = Bot(BOT_TOKEN)
     dp = Dispatcher()
+    dp.message.middleware(UserMessageLogMiddleware())
+    dp.callback_query.middleware(UserCallbackLogMiddleware())
     dp.include_router(router)
     dp.startup.register(on_startup)
 

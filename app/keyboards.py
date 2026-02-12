@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, Optional
 
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -34,7 +34,10 @@ def admin_panel_keyboard():
     kb.button(text="Qism qo'shish", callback_data="admin:addpart")
     kb.button(text="E'lon yuborish", callback_data="admin:broadcast")
     kb.button(text="Loglar", callback_data="admin:logs")
+    kb.button(text="Log fayl", callback_data="admin:logfile")
     kb.button(text="Foydalanuvchilar", callback_data="admin:users")
+    kb.button(text="Statistika", callback_data="admin:stats")
+    kb.button(text="Backup", callback_data="admin:backup")
     kb.button(text="Yordam", callback_data="admin:help")
     kb.adjust(2)
     return kb.as_markup()
@@ -43,6 +46,18 @@ def admin_panel_keyboard():
 def admin_back_keyboard():
     kb = InlineKeyboardBuilder()
     kb.button(text="Ortga", callback_data="admin:back")
+    return kb.as_markup()
+
+
+def admin_permissions_keyboard(permissions: dict[str, int], labels: dict[str, str]):
+    kb = InlineKeyboardBuilder()
+    for key, value in permissions.items():
+        icon = "✅" if value else "❌"
+        label = labels.get(key, key)
+        kb.button(text=f"{icon} {label}", callback_data=f"perm:toggle:{key}")
+    kb.button(text="Saqlash", callback_data="perm:save")
+    kb.button(text="Bekor qilish", callback_data="perm:cancel")
+    kb.adjust(1)
     return kb.as_markup()
 
 
@@ -73,7 +88,13 @@ def log_cancel_keyboard():
     return kb.as_markup()
 
 
-def serial_parts_keyboard(serial_id: int, parts: Iterable[int], page: int, per_page: int):
+def serial_parts_keyboard(
+    serial_id: int,
+    parts: Iterable[int],
+    page: int,
+    per_page: int,
+    share_link: Optional[str] = None,
+):
     kb = InlineKeyboardBuilder()
     parts_list = list(parts)
     start = page * per_page
@@ -103,6 +124,8 @@ def serial_parts_keyboard(serial_id: int, parts: Iterable[int], page: int, per_p
         )
     if nav_buttons:
         kb.row(*nav_buttons)
+    if share_link:
+        kb.row(InlineKeyboardButton(text="Ulashish", url=share_link))
     return kb.as_markup()
 
 
@@ -114,13 +137,7 @@ def users_keyboard(page: int, total_pages: int):
     if page + 1 < total_pages:
         kb.button(text=">", callback_data=f"admin:users:{page + 1}")
     kb.adjust(3)
-    return kb.as_markup()
-
-
-def share_keyboard(share_link: str):
-    kb = InlineKeyboardBuilder()
-    kb.button(text="Ulashish", url=share_link)
-    kb.adjust(1)
+    kb.button(text="Ortga", callback_data="admin:back")
     return kb.as_markup()
 
 
@@ -152,4 +169,5 @@ def serials_list_keyboard(serials: Iterable[dict], page: int, total_pages: int):
         )
     if nav_buttons:
         kb.row(*nav_buttons)
+    kb.row(InlineKeyboardButton(text="Ortga", callback_data="admin:back"))
     return kb.as_markup()

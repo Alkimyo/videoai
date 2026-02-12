@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 import os
+import zipfile
 from collections import deque
 from typing import Optional
 
@@ -8,9 +9,9 @@ from aiogram import F, Router
 from aiogram.enums import ChatMemberStatus
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import CallbackQuery, ChatJoinRequest, Message
+from aiogram.types import CallbackQuery, ChatJoinRequest, FSInputFile, Message
 
-from app.config import LOG_PATH, OWNER_ID, SOURCE_CHANNEL_ID
+from app.config import DB_PATH, LOG_PATH, OWNER_ID, SOURCE_CHANNEL_ID
 from app.db import (
     add_admin,
     add_channel,
@@ -21,6 +22,7 @@ from app.db import (
     del_admin,
     del_channel,
     get_admins,
+    get_admin_permissions,
     get_channels,
     get_serial_by_code,
     get_serial_by_id,
@@ -34,17 +36,22 @@ from app.db import (
     save_serial_session,
     clear_serial_session,
     get_users,
+    has_admin_permission,
     has_join_request,
+    set_admin_permissions,
+    record_serial_view,
+    get_serial_day_stats,
+    get_serial_recent_days,
 )
 from app.keyboards import (
     admin_back_keyboard,
     admin_panel_keyboard,
+    admin_permissions_keyboard,
     log_cancel_keyboard,
     serial_cancel_keyboard,
     serial_flow_keyboard,
     serial_parts_keyboard,
     serials_list_keyboard,
-    share_keyboard,
     subscribe_keyboard,
     users_keyboard,
     user_keyboard,
@@ -54,9 +61,50 @@ SERIAL_PARTS_PER_PAGE = 20
 SERIALS_PER_PAGE = 20
 USERS_PER_PAGE = 20
 LOG_QUERY_ADMINS: set[int] = set()
+ADMIN_ADD_SESSIONS: dict[int, dict[str, object]] = {}
+ADMIN_PERMISSION_LABELS = {
+    "can_manage_admins": "Adminlarni boshqarish",
+    "can_manage_channels": "Kanallarni boshqarish",
+    "can_add_serial": "Serial qo'shish",
+    "can_add_part": "Qism qo'shish",
+    "can_broadcast": "E'lon yuborish",
+    "can_view_lists": "Ro'yxatlarni ko'rish",
+    "can_view_logs": "Loglarni ko'rish",
+    "can_view_stats": "Statistikani ko'rish",
+    "can_backup": "Backup olish",
+}
+
+ADMIN_PERMISSION_KEYS = list(ADMIN_PERMISSION_LABELS.keys())
+
+
+def _default_admin_permissions() -> dict[str, int]:
+    return {key: 1 for key in ADMIN_PERMISSION_LABELS}
+
+
+def _has_perm(user_id: int, perm: str) -> bool:
+    return has_admin_permission(user_id, perm)
+
+
+def _format_perm_text(perms: dict[str, int]) -> str:
+    lines = ["Ruxsatlarni tanlang:"]
+    for key, label in ADMIN_PERMISSION_LABELS.items():
+        icon = "✅" if perms.get(key) else "❌"
+        lines.append(f"{icon} {label}")
+    return "\n".join(lines)
+
+
+def _format_perm_inline(perms: dict[str, int]) -> str:
+    parts = []
+    for key in ADMIN_PERMISSION_KEYS:
+        icon = "✅" if perms.get(key) else "❌"
+        label = ADMIN_PERMISSION_LABELS.get(key, key)
+        parts.append(f"{label}:{icon}")
+    return ", ".join(parts)
 
 router = Router()
 LOG_TAIL_LINES = 40
+LOG_MAX_BYTES = 10 * 1024 * 1024
+LOG_BACKUP_COUNT = 3
 
 
 async def _check_subscriptions(bot, user_id: int, channels: list) -> bool:
@@ -175,6 +223,10 @@ async def serial_page_callback(callback: CallbackQuery):
     )
 
 
+def _today() -> str:
+    return dt.datetime.utcnow().date().isoformat()
+
+
 def _parse_code(raw: str) -> Optional[str]:
     value = raw.strip()
     if not value.isdigit():
@@ -204,8 +256,37 @@ def _log_event(event: str, user_id: Optional[int] = None, detail: str = "") -> N
     log_dir = os.path.dirname(LOG_PATH)
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
+    _rotate_log_if_needed()
     with open(LOG_PATH, "a", encoding="utf-8") as handle:
         handle.write(f"{line}\n")
+
+
+def _rotate_log_if_needed() -> None:
+    if not os.path.exists(LOG_PATH):
+        return
+    try:
+        if os.path.getsize(LOG_PATH) < LOG_MAX_BYTES:
+            return
+    except OSError:
+        return
+    oldest = f"{LOG_PATH}.{LOG_BACKUP_COUNT}"
+    if os.path.exists(oldest):
+        try:
+            os.remove(oldest)
+        except OSError:
+            return
+    for idx in range(LOG_BACKUP_COUNT - 1, 0, -1):
+        src = f"{LOG_PATH}.{idx}"
+        dst = f"{LOG_PATH}.{idx + 1}"
+        if os.path.exists(src):
+            try:
+                os.replace(src, dst)
+            except OSError:
+                return
+    try:
+        os.replace(LOG_PATH, f"{LOG_PATH}.1")
+    except OSError:
+        return
 
 
 def _tail_log(limit: int) -> list[str]:
@@ -252,31 +333,35 @@ async def _get_share_link(bot, serial_code: int) -> Optional[str]:
     return f"https://t.me/{me.username}?start={serial_code}"
 
 
-async def _safe_copy_message(
-    bot, chat_id: int, from_chat_id: int, message_id: int
+def _build_backup_zip() -> Optional[str]:
+    timestamp = dt.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    backup_path = os.path.join("/tmp", f"serialbot-backup-{timestamp}.zip")
+    files = []
+    if os.path.exists(DB_PATH):
+        files.append(DB_PATH)
+    if os.path.exists(LOG_PATH):
+        files.append(LOG_PATH)
+    if not files:
+        return None
+    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for file_path in files:
+            archive.write(file_path, arcname=os.path.basename(file_path))
+    return backup_path
+
+
+async def _safe_send_video(
+    message: Message,
+    file_id: str,
+    caption: Optional[str],
+    reply_markup=None,
 ) -> None:
-    while True:
-        try:
-            await bot.copy_message(
-                chat_id=chat_id,
-                from_chat_id=from_chat_id,
-                message_id=message_id,
-                protect_content=True,
-            )
-            return
-        except TelegramRetryAfter as err:
-            await _wait_retry(err)
-        except TelegramAPIError:
-            return
-
-
-async def _safe_send_video(message: Message, file_id: str, caption: Optional[str]) -> None:
     while True:
         try:
             await message.answer_video(
                 file_id,
                 caption=caption,
                 protect_content=True,
+                reply_markup=reply_markup,
             )
             return
         except TelegramRetryAfter as err:
@@ -285,13 +370,19 @@ async def _safe_send_video(message: Message, file_id: str, caption: Optional[str
             return
 
 
-async def _safe_send_document(message: Message, file_id: str, caption: Optional[str]) -> None:
+async def _safe_send_document(
+    message: Message,
+    file_id: str,
+    caption: Optional[str],
+    reply_markup=None,
+) -> None:
     while True:
         try:
             await message.answer_document(
                 file_id,
                 caption=caption,
                 protect_content=True,
+                reply_markup=reply_markup,
             )
             return
         except TelegramRetryAfter as err:
@@ -324,7 +415,7 @@ async def start_handler(message: Message, command: CommandObject):
         code = _parse_code(command.args)
         if code:
             serial = get_serial_by_code(int(code))
-            if serial and await _show_serial_parts(message, serial["id"], serial["title"]):
+            if serial and await _show_serial_parts(message, serial["id"]):
                 return
             await message.answer("Serial topilmadi.")
             return
@@ -344,8 +435,8 @@ async def help_handler(message: Message):
     text = (
         "Buyruqlar:\n"
         "/admin - admin panel\n"
-        "/addadmin <user_id> - admin qo'shish (faqat owner)\n"
-        "/deladmin <user_id> - admin chiqarish (faqat owner)\n"
+        "/addadmin <user_id> - admin qo'shish\n"
+        "/deladmin <user_id> - admin chiqarish\n"
         "/admins - adminlar ro'yxati\n"
         "/addchannel <@username|chat_id> [invite_link] - majburiy kanal qo'shish\n"
         "/delchannel <@username|chat_id> - kanalni chiqarish\n"
@@ -355,12 +446,13 @@ async def help_handler(message: Message):
         "/broadcast - reply bilan rasm/video yuborish\n"
     )
     await message.answer(text)
+    _log_event("admins_list", message.from_user.id)
 
 
 @router.message(Command("addadmin"))
 async def add_admin_handler(message: Message, command: CommandObject):
-    if message.from_user.id != OWNER_ID:
-        await message.answer("Bu buyruq faqat owner uchun.")
+    if not _has_perm(message.from_user.id, "can_manage_admins"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     if not command.args:
         await message.answer("Foydalanish: /addadmin <user_id>")
@@ -370,14 +462,26 @@ async def add_admin_handler(message: Message, command: CommandObject):
     except ValueError:
         await message.answer("user_id raqam bo'lishi kerak.")
         return
-    add_admin(user_id)
-    await message.answer("Admin qo'shildi.")
+    perms = get_admin_permissions(user_id) or _default_admin_permissions()
+    ADMIN_ADD_SESSIONS[message.from_user.id] = {
+        "target_id": user_id,
+        "perms": perms,
+        "mode": "add",
+    }
+    _log_event("admin_add_start", message.from_user.id, f"target_id={user_id}")
+    await message.answer(
+        _format_perm_text(ADMIN_ADD_SESSIONS[message.from_user.id]["perms"]),
+        reply_markup=admin_permissions_keyboard(
+            ADMIN_ADD_SESSIONS[message.from_user.id]["perms"],
+            ADMIN_PERMISSION_LABELS,
+        ),
+    )
 
 
 @router.message(Command("deladmin"))
 async def del_admin_handler(message: Message, command: CommandObject):
-    if message.from_user.id != OWNER_ID:
-        await message.answer("Bu buyruq faqat owner uchun.")
+    if not _has_perm(message.from_user.id, "can_manage_admins"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     if not command.args:
         await message.answer("Foydalanish: /deladmin <user_id>")
@@ -388,19 +492,24 @@ async def del_admin_handler(message: Message, command: CommandObject):
         await message.answer("user_id raqam bo'lishi kerak.")
         return
     del_admin(user_id)
+    _log_event("admin_deleted", message.from_user.id, f"target_id={user_id}")
     await message.answer("Admin chiqarildi.")
 
 
 @router.message(Command("admins"))
 async def list_admins_handler(message: Message):
-    if message.from_user.id != OWNER_ID:
-        await message.answer("Bu buyruq faqat owner uchun.")
+    if not _has_perm(message.from_user.id, "can_view_lists"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     admins = get_admins()
     if not admins:
         await message.answer("Adminlar yo'q.")
         return
-    text = "Adminlar:\n" + "\n".join(str(admin_id) for admin_id in admins)
+    lines = ["Adminlar:"]
+    for admin_id in admins:
+        perms = get_admin_permissions(admin_id) or _default_admin_permissions()
+        lines.append(f"{admin_id} | {_format_perm_inline(perms)}")
+    text = "\n".join(lines)
     await message.answer(text)
 
 
@@ -450,6 +559,9 @@ async def serial_continue_callback(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
+    if not _has_perm(callback.from_user.id, "can_add_part"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
     session = get_serial_session(callback.from_user.id)
     if not session or session.get("state") != "await_part":
         await callback.answer("Serial sessiya topilmadi.", show_alert=True)
@@ -460,17 +572,28 @@ async def serial_continue_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin:admins")
 async def admin_list_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_view_lists"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     admins = get_admins()
-    text = "Adminlar:\n" + "\n".join(str(admin_id) for admin_id in admins) if admins else "Adminlar yo'q."
+    if not admins:
+        text = "Adminlar yo'q."
+    else:
+        lines = ["Adminlar:"]
+        for admin_id in admins:
+            perms = get_admin_permissions(admin_id) or _default_admin_permissions()
+            lines.append(f"{admin_id} | {_format_perm_inline(perms)}")
+        text = "\n".join(lines)
     await callback.message.edit_text(text, reply_markup=admin_back_keyboard())
+    _log_event("admins_list", callback.from_user.id)
 
 
 @router.callback_query(F.data == "admin:channels")
 async def admin_channels_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not (
+        _has_perm(callback.from_user.id, "can_manage_channels")
+        or _has_perm(callback.from_user.id, "can_view_lists")
+    ):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     channels = get_channels()
@@ -486,24 +609,43 @@ async def admin_channels_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin:stats")
 async def admin_stats_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_view_stats"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
-    await callback.message.edit_text("Statistika o'chirilgan.", reply_markup=admin_back_keyboard())
+    day = _today()
+    total, top = get_serial_day_stats(day)
+    lines = [f"Bugungi ko'rishlar: {total}"]
+    if top:
+        lines.append("Top serial kodlari:")
+        lines.extend([f"{code} - {count}" for code, count in top])
+    recent = get_serial_recent_days()
+    if recent:
+        lines.append("So'nggi kunlar:")
+        lines.extend([f"{d}: {c}" for d, c in recent])
+    await callback.message.edit_text("\n".join(lines), reply_markup=admin_back_keyboard())
 
 
 @router.callback_query(F.data == "admin:users")
 async def admin_users_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_view_lists"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
     await _render_users_page(callback, page=0)
 
 
 @router.callback_query(F.data == "admin:serials")
 async def admin_serials_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_view_lists"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
     await _render_serials_page(callback, page=0)
 
 
 @router.callback_query(F.data.startswith("admin:serials:"))
 async def admin_serials_page_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_view_lists"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
     parts = callback.data.split(":")
     if len(parts) != 3:
         await callback.answer("Xatolik.", show_alert=True)
@@ -518,7 +660,7 @@ async def admin_serials_page_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("admin:serial:"))
 async def admin_serial_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_view_lists"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     parts = callback.data.split(":")
@@ -534,12 +676,25 @@ async def admin_serial_callback(callback: CallbackQuery):
     if not serial:
         await callback.answer("Serial topilmadi.", show_alert=True)
         return
-    ok = await _show_serial_parts(callback.message, serial["id"], serial["title"])
+    ok = await _show_serial_parts(callback.message, serial["id"])
     if not ok:
         await callback.answer("Serialda qismlar yo'q.", show_alert=True)
 
+
+@router.callback_query(F.data == "admin:backup")
+async def admin_backup_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_backup"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    await callback.message.edit_text("Backup tayyorlanmoqda...")
+    await _send_backup(callback.message)
+    _log_event("backup_sent", callback.from_user.id)
+
 @router.callback_query(F.data.startswith("admin:users:"))
 async def admin_users_page_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_view_lists"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
     parts = callback.data.split(":")
     if len(parts) != 3:
         await callback.answer("Xatolik.", show_alert=True)
@@ -553,7 +708,7 @@ async def admin_users_page_callback(callback: CallbackQuery):
 
 
 async def _render_users_page(callback: CallbackQuery, page: int) -> None:
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_view_lists"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     users = get_users()
@@ -579,7 +734,7 @@ async def _render_users_page(callback: CallbackQuery, page: int) -> None:
 
 
 async def _render_serials_page(callback: CallbackQuery, page: int) -> None:
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_view_lists"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     serials = get_serials()
@@ -606,7 +761,7 @@ async def _render_serials_page(callback: CallbackQuery, page: int) -> None:
 
 @router.callback_query(F.data == "admin:logs")
 async def admin_logs_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_view_logs"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     LOG_QUERY_ADMINS.add(callback.from_user.id)
@@ -614,6 +769,16 @@ async def admin_logs_callback(callback: CallbackQuery):
         "Foydalanuvchi ID yoki @username yuboring.",
         reply_markup=log_cancel_keyboard(),
     )
+
+
+@router.callback_query(F.data == "admin:logfile")
+async def admin_logfile_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_view_logs"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    await callback.message.edit_text("Log fayl yuborilmoqda...")
+    await _send_log_file(callback.message)
+    _log_event("logfile_sent", callback.from_user.id)
 
 
 @router.callback_query(F.data == "admin:help")
@@ -624,6 +789,7 @@ async def admin_help_callback(callback: CallbackQuery):
     text = (
         "Admin buyruqlar:\n"
         "/addadmin <user_id>\n"
+        "/editadmin <user_id>\n"
         "/deladmin <user_id>\n"
         "/addchannel <@username|chat_id> [invite_link]\n"
         "/delchannel <@username|chat_id>\n"
@@ -631,16 +797,22 @@ async def admin_help_callback(callback: CallbackQuery):
         "/addpart <serial_nomi|kod>\n"
         "/part <qism_raqami>\n"
         "Admin panel -> Loglar\n"
+        "Admin panel -> Log fayl\n"
         "Admin panel -> Seriallar\n"
+        "Admin panel -> Statistika\n"
+        "Admin panel -> Backup\n"
         "Admin panel -> Foydalanuvchilar\n"
         "/log <user_id|@username>\n"
+        "/logfile\n"
+        "/stats\n"
+        "/backup\n"
     )
     await callback.message.edit_text(text, reply_markup=admin_back_keyboard())
 
 
 @router.callback_query(F.data == "admin:addadmin")
 async def admin_addadmin_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_manage_admins"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     await callback.message.edit_text(
@@ -649,9 +821,65 @@ async def admin_addadmin_callback(callback: CallbackQuery):
     )
 
 
+@router.callback_query(F.data.startswith("perm:"))
+async def admin_permissions_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_manage_admins"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    session = ADMIN_ADD_SESSIONS.get(callback.from_user.id)
+    if not session:
+        await callback.answer("Sessiya topilmadi.", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    action = parts[1]
+    perms = session.get("perms") or {}
+    if action == "toggle":
+        if len(parts) != 3:
+            await callback.answer("Xatolik.", show_alert=True)
+            return
+        key = parts[2]
+        if key not in ADMIN_PERMISSION_LABELS:
+            await callback.answer("Xatolik.", show_alert=True)
+            return
+        perms[key] = 0 if perms.get(key) else 1
+        await callback.message.edit_text(
+            _format_perm_text(perms),
+            reply_markup=admin_permissions_keyboard(perms, ADMIN_PERMISSION_LABELS),
+        )
+        _log_event(
+            "admin_perm_toggle",
+            callback.from_user.id,
+            f"target_id={session.get('target_id')} key={key} value={perms[key]}",
+        )
+        return
+    if action == "save":
+        target_id = session.get("target_id")
+        if not isinstance(target_id, int):
+            await callback.answer("Xatolik.", show_alert=True)
+            return
+        add_admin(target_id)
+        set_admin_permissions(target_id, perms)
+        ADMIN_ADD_SESSIONS.pop(callback.from_user.id, None)
+        _log_event("admin_saved", callback.from_user.id, f"target_id={target_id}")
+        await callback.message.edit_text(
+            "Admin saqlandi.",
+            reply_markup=admin_back_keyboard(),
+        )
+        return
+    if action == "cancel":
+        ADMIN_ADD_SESSIONS.pop(callback.from_user.id, None)
+        _log_event("admin_add_cancel", callback.from_user.id, f"target_id={session.get('target_id')}")
+        await callback.message.edit_text("Bekor qilindi.", reply_markup=admin_back_keyboard())
+        return
+    await callback.answer("Xatolik.", show_alert=True)
+
+
 @router.callback_query(F.data == "admin:deladmin")
 async def admin_deladmin_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_manage_admins"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     await callback.message.edit_text(
@@ -660,9 +888,38 @@ async def admin_deladmin_callback(callback: CallbackQuery):
     )
 
 
+@router.message(Command("editadmin"))
+async def edit_admin_handler(message: Message, command: CommandObject):
+    if not _has_perm(message.from_user.id, "can_manage_admins"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    if not command.args:
+        await message.answer("Foydalanish: /editadmin <user_id>")
+        return
+    try:
+        user_id = int(command.args.strip())
+    except ValueError:
+        await message.answer("user_id raqam bo'lishi kerak.")
+        return
+    if not is_admin(user_id):
+        await message.answer("Admin topilmadi.")
+        return
+    perms = get_admin_permissions(user_id) or _default_admin_permissions()
+    ADMIN_ADD_SESSIONS[message.from_user.id] = {
+        "target_id": user_id,
+        "perms": perms,
+        "mode": "edit",
+    }
+    _log_event("admin_edit_start", message.from_user.id, f"target_id={user_id}")
+    await message.answer(
+        _format_perm_text(perms),
+        reply_markup=admin_permissions_keyboard(perms, ADMIN_PERMISSION_LABELS),
+    )
+
+
 @router.callback_query(F.data == "admin:addchannel")
 async def admin_addchannel_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_manage_channels"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     await callback.message.edit_text(
@@ -673,7 +930,7 @@ async def admin_addchannel_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin:delchannel")
 async def admin_delchannel_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_manage_channels"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     await callback.message.edit_text(
@@ -695,7 +952,7 @@ async def admin_addmovie_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin:addserial")
 async def admin_addserial_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_add_serial"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     save_serial_session(
@@ -703,6 +960,7 @@ async def admin_addserial_callback(callback: CallbackQuery):
         state="await_title",
         created_at=_now(),
     )
+    _log_event("serial_add_start", callback.from_user.id)
     await callback.message.edit_text(
         "Serial nomini yuboring.",
         reply_markup=serial_cancel_keyboard(),
@@ -711,7 +969,7 @@ async def admin_addserial_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin:addpart")
 async def admin_addpart_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_add_part"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     await callback.message.edit_text(
@@ -733,7 +991,7 @@ async def admin_delmovie_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin:broadcast")
 async def admin_broadcast_callback(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not _has_perm(callback.from_user.id, "can_broadcast"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     await callback.message.edit_text(
@@ -744,8 +1002,8 @@ async def admin_broadcast_callback(callback: CallbackQuery):
 
 @router.message(Command("addchannel"))
 async def add_channel_handler(message: Message, command: CommandObject):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bu buyruq faqat adminlar uchun.")
+    if not _has_perm(message.from_user.id, "can_manage_channels"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     if not command.args:
         await message.answer("Foydalanish: /addchannel <@username|chat_id>")
@@ -773,13 +1031,14 @@ async def add_channel_handler(message: Message, command: CommandObject):
                 await message.answer("Kanal uchun invite link yaratilmayapti.")
                 return
     add_channel(chat.id, chat.username, chat.title or chat.username or str(chat.id), invite_link)
+    _log_event("channel_added", message.from_user.id, f"chat_id={chat.id}")
     await message.answer("Kanal qo'shildi.")
 
 
 @router.message(Command("delchannel"))
 async def del_channel_handler(message: Message, command: CommandObject):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bu buyruq faqat adminlar uchun.")
+    if not _has_perm(message.from_user.id, "can_manage_channels"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     if not command.args:
         await message.answer("Foydalanish: /delchannel <@username|chat_id>")
@@ -791,13 +1050,14 @@ async def del_channel_handler(message: Message, command: CommandObject):
         await message.answer("Kanal topilmadi.")
         return
     del_channel(chat.id)
+    _log_event("channel_deleted", message.from_user.id, f"chat_id={chat.id}")
     await message.answer("Kanal chiqarildi.")
 
 
 @router.message(Command("channels"))
 async def list_channels_handler(message: Message):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bu buyruq faqat adminlar uchun.")
+    if not (_has_perm(message.from_user.id, "can_manage_channels") or _has_perm(message.from_user.id, "can_view_lists")):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     channels = get_channels()
     if not channels:
@@ -808,12 +1068,13 @@ async def list_channels_handler(message: Message):
         for item in channels
     )
     await message.answer(text)
+    _log_event("channels_list", message.from_user.id)
 
 
 @router.message(Command("addpart"))
 async def add_part_handler(message: Message, command: CommandObject):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bu buyruq faqat adminlar uchun.")
+    if not _has_perm(message.from_user.id, "can_add_part"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     if not command.args:
         await message.answer("Foydalanish: /addpart <serial_nomi|kod>")
@@ -838,12 +1099,17 @@ async def add_part_handler(message: Message, command: CommandObject):
     )
     prompt = f"{serial['title']} - {next_part}-qismni yuboring."
     await message.answer(prompt, reply_markup=serial_flow_keyboard())
+    _log_event(
+        "serial_addpart_start",
+        message.from_user.id,
+        f"serial_id={serial['id']} next_part={next_part}",
+    )
 
 
 @router.message(Command("part"))
 async def set_part_handler(message: Message, command: CommandObject):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bu buyruq faqat adminlar uchun.")
+    if not _has_perm(message.from_user.id, "can_add_part"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     session = get_serial_session(message.from_user.id)
     if not session or session.get("state") != "await_part":
@@ -865,6 +1131,11 @@ async def set_part_handler(message: Message, command: CommandObject):
     )
     prompt = f"{part}-qismni yuboring."
     await message.answer(prompt, reply_markup=serial_flow_keyboard())
+    _log_event(
+        "serial_part_set",
+        message.from_user.id,
+        f"serial_id={session.get('serial_id')} part={part}",
+    )
 
 
 @router.message(Command("addmovie"))
@@ -886,6 +1157,8 @@ async def del_movie_disabled(message: Message, command: CommandObject):
     )
 )
 async def admin_log_text_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_view_logs"):
+        return
     if get_serial_session(message.from_user.id):
         return
     raw = message.text.strip()
@@ -919,6 +1192,9 @@ async def admin_serial_text_handler(message: Message):
         return
     state = session.get("state")
     if state == "await_title":
+        if not _has_perm(message.from_user.id, "can_add_serial"):
+            await message.answer("Bu buyruq uchun ruxsat yo'q.")
+            return
         title = message.text.strip()
         if not title:
             await message.answer("Serial nomi bo'sh bo'lmasin.")
@@ -931,6 +1207,7 @@ async def admin_serial_text_handler(message: Message):
             clear_serial_session(message.from_user.id)
             return
         serial = add_serial(title, _now())
+        _log_event("serial_created", message.from_user.id, f"serial_id={serial['id']} code={serial['code']}")
         save_serial_session(
             message.from_user.id,
             state="await_part",
@@ -944,6 +1221,9 @@ async def admin_serial_text_handler(message: Message):
         )
         return
     if state == "await_part":
+        if not _has_perm(message.from_user.id, "can_add_part"):
+            await message.answer("Bu buyruq uchun ruxsat yo'q.")
+            return
         part = _parse_part(message.text)
         if part is None:
             await message.answer("Qism raqamini yuboring yoki video/document yuboring.")
@@ -966,6 +1246,9 @@ async def admin_serial_text_handler(message: Message):
 @router.message(F.video | F.document)
 async def admin_serial_media_handler(message: Message):
     if not is_admin(message.from_user.id):
+        return
+    if not _has_perm(message.from_user.id, "can_add_part"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     session = get_serial_session(message.from_user.id)
     if not session or session.get("state") != "await_part":
@@ -1004,6 +1287,11 @@ async def admin_serial_media_handler(message: Message):
         source_chat_id=msg.chat.id,
         source_message_id=msg.message_id,
     )
+    _log_event(
+        "serial_part_added",
+        message.from_user.id,
+        f"serial_id={serial_id} part={part}",
+    )
     next_part = part + 1
     save_serial_session(
         message.from_user.id,
@@ -1018,51 +1306,58 @@ async def admin_serial_media_handler(message: Message):
     )
 
 
-async def _show_serial_parts(message: Message, serial_id: int, title: str) -> bool:
+async def _show_serial_parts(message: Message, serial_id: int) -> bool:
     parts = get_serial_parts(serial_id)
     if not parts:
         return False
     part_numbers = [int(item["part"]) for item in parts if item.get("part") is not None]
     if not part_numbers:
         return False
-    await message.answer(
-        f"{title} qismlari:",
-        reply_markup=serial_parts_keyboard(
-            serial_id,
-            part_numbers,
-            page=0,
-            per_page=SERIAL_PARTS_PER_PAGE,
-        ),
+    first_part = min(part_numbers)
+    return await _send_serial_part(
+        message,
+        serial_id,
+        first_part,
+        part_numbers=part_numbers,
     )
-    return True
 
 
-async def _send_serial_part(message: Message, serial_id: int, part: int) -> bool:
+async def _send_serial_part(
+    message: Message,
+    serial_id: int,
+    part: int,
+    part_numbers: Optional[list[int]] = None,
+) -> bool:
     item = get_serial_part(serial_id, part)
     if not item:
         return False
     caption = item.get("caption") or None
-    source_chat_id = item.get("source_chat_id")
-    source_message_id = item.get("source_message_id")
-    if source_chat_id and source_message_id:
-        await _safe_copy_message(
-            message.bot,
-            message.chat.id,
-            source_chat_id,
-            source_message_id,
-        )
-    elif item.get("file_type") == "document":
-        await _safe_send_document(message, item["file_id"], caption)
-    else:
-        await _safe_send_video(message, item["file_id"], caption)
     serial = get_serial_by_id(serial_id)
     if serial:
-        share_link = await _get_share_link(message.bot, serial["code"])
-        if share_link:
-            await message.answer(
-                "Do'stlarga ulashing:",
-                reply_markup=share_keyboard(share_link),
-            )
+        record_serial_view(_today(), int(serial["code"]))
+    share_link = await _get_share_link(message.bot, serial["code"]) if serial else None
+    if part_numbers is None:
+        parts = get_serial_parts(serial_id)
+        part_numbers = [int(row["part"]) for row in parts if row.get("part") is not None]
+    part_numbers_sorted = sorted(part_numbers) if part_numbers else []
+    page = 0
+    if part_numbers_sorted:
+        try:
+            index = part_numbers_sorted.index(part)
+            page = index // SERIAL_PARTS_PER_PAGE
+        except ValueError:
+            page = 0
+    reply_markup = serial_parts_keyboard(
+        serial_id,
+        part_numbers_sorted or [part],
+        page=page,
+        per_page=SERIAL_PARTS_PER_PAGE,
+        share_link=share_link,
+    )
+    if item.get("file_type") == "document":
+        await _safe_send_document(message, item["file_id"], caption, reply_markup=reply_markup)
+    else:
+        await _safe_send_video(message, item["file_id"], caption, reply_markup=reply_markup)
     return True
 
 
@@ -1079,6 +1374,7 @@ async def serial_command_handler(message: Message, command: CommandObject):
         await message.answer("Foydalanish: /serial <nom|kod>")
         return
     raw = command.args.strip()
+    _log_event("serial_request", message.from_user.id, f"query={raw}")
     serial = None
     if raw.isdigit():
         serial = get_serial_by_code(int(raw))
@@ -1087,7 +1383,7 @@ async def serial_command_handler(message: Message, command: CommandObject):
     if not serial:
         await message.answer("Serial topilmadi.")
         return
-    if not await _show_serial_parts(message, serial["id"], serial["title"]):
+    if not await _show_serial_parts(message, serial["id"]):
         await message.answer("Serialda qismlar yo'q.")
 
 
@@ -1103,21 +1399,63 @@ async def movie_text_handler(message: Message):
         return
     code = _parse_code(raw)
     if code:
+        _log_event("serial_request", message.from_user.id, f"query={code}")
         serial = get_serial_by_code(int(code))
-        if serial and await _show_serial_parts(message, serial["id"], serial["title"]):
+        if serial and await _show_serial_parts(message, serial["id"]):
             return
         await message.answer("Serial topilmadi.")
         return
     serial = get_serial_by_title(raw)
-    if serial and await _show_serial_parts(message, serial["id"], serial["title"]):
+    _log_event("serial_request", message.from_user.id, f"query={raw}")
+    if serial and await _show_serial_parts(message, serial["id"]):
         return
     await message.answer("Serial topilmadi.")
 
 
+@router.message(Command("stats"))
+async def stats_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_view_stats"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    day = _today()
+    total, top = get_serial_day_stats(day)
+    lines = [f"Bugungi ko'rishlar: {total}"]
+    if top:
+        lines.append("Top serial kodlari:")
+        lines.extend([f"{code} - {count}" for code, count in top])
+    recent = get_serial_recent_days()
+    if recent:
+        lines.append("So'nggi kunlar:")
+        lines.extend([f"{d}: {c}" for d, c in recent])
+    await message.answer("\n".join(lines))
+    _log_event("stats_view", message.from_user.id)
+
+
+async def _send_backup(message: Message) -> None:
+    backup_path = _build_backup_zip()
+    if not backup_path:
+        await message.answer("Backup uchun fayl topilmadi.")
+        return
+    try:
+        await message.answer_document(FSInputFile(backup_path), caption="Backup")
+    finally:
+        try:
+            os.remove(backup_path)
+        except Exception:
+            pass
+
+
+async def _send_log_file(message: Message) -> None:
+    if not os.path.exists(LOG_PATH):
+        await message.answer("Log fayli topilmadi.")
+        return
+    await message.answer_document(FSInputFile(LOG_PATH), caption="Log fayl")
+
+
 @router.message(Command("log"))
 async def log_handler(message: Message, command: CommandObject):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bu buyruq faqat adminlar uchun.")
+    if not _has_perm(message.from_user.id, "can_view_logs"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     if not command.args:
         await message.answer("Foydalanish: /log <user_id|@username>")
@@ -1141,6 +1479,26 @@ async def log_handler(message: Message, command: CommandObject):
     if len(text) > 3900:
         text = text[-3900:]
     await message.answer(text)
+    _log_event("log_view", message.from_user.id, f"target_id={user_id}")
+
+
+@router.message(Command("logfile"))
+async def logfile_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_view_logs"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    await _send_log_file(message)
+    _log_event("logfile_sent", message.from_user.id)
+
+
+@router.message(Command("backup"))
+async def backup_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_backup"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    await message.answer("Backup tayyorlanmoqda...")
+    await _send_backup(message)
+    _log_event("backup_sent", message.from_user.id)
 
 
 @router.chat_join_request()
@@ -1155,7 +1513,11 @@ async def join_request_handler(join_request: ChatJoinRequest):
 async def _broadcast_to_users(message: Message, text: Optional[str]) -> tuple[int, int]:
     ok = 0
     failed = 0
-    for user_id in get_users():
+    for user in get_users():
+        user_id = user.get("user_id") if isinstance(user, dict) else user
+        if not user_id:
+            failed += 1
+            continue
         try:
             if message.reply_to_message:
                 await message.reply_to_message.copy_to(chat_id=user_id)
@@ -1169,8 +1531,8 @@ async def _broadcast_to_users(message: Message, text: Optional[str]) -> tuple[in
 
 @router.message(Command("broadcast"))
 async def broadcast_handler(message: Message, command: CommandObject):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bu buyruq faqat adminlar uchun.")
+    if not _has_perm(message.from_user.id, "can_broadcast"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
     if not command.args and not message.reply_to_message:
         await message.answer("Foydalanish: /broadcast <text> yoki reply bilan yuboring.")
@@ -1178,3 +1540,4 @@ async def broadcast_handler(message: Message, command: CommandObject):
     text = command.args.strip() if command.args else None
     ok, failed = await _broadcast_to_users(message, text)
     await message.answer(f"Yuborildi: {ok}, xatolik: {failed}")
+    _log_event("broadcast", message.from_user.id, f"ok={ok} failed={failed}")

@@ -17,6 +17,9 @@ python -m app
 - Send serial: `/serial <name|code>` (numeric codes or title)
 - Share serial: `https://t.me/<bot_username>?start=<serial_code>`
 - Admin panel: `/admin` (inline buttons)
+- Stats: `/stats` (admin)
+- Backup: `/backup` (admin, DB + log zip)
+- Log file: `/logfile` (admin)
 - Broadcast: `/broadcast <text>` or reply with image/video
 
 `SOURCE_CHANNEL_ID` must be set for serial uploads.

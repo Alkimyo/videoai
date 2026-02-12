@@ -21,7 +21,16 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS admins (
-                user_id INTEGER PRIMARY KEY
+                user_id INTEGER PRIMARY KEY,
+                can_manage_admins INTEGER NOT NULL DEFAULT 1,
+                can_manage_channels INTEGER NOT NULL DEFAULT 1,
+                can_add_serial INTEGER NOT NULL DEFAULT 1,
+                can_add_part INTEGER NOT NULL DEFAULT 1,
+                can_broadcast INTEGER NOT NULL DEFAULT 1,
+                can_view_lists INTEGER NOT NULL DEFAULT 1,
+                can_view_logs INTEGER NOT NULL DEFAULT 1,
+                can_view_stats INTEGER NOT NULL DEFAULT 1,
+                can_backup INTEGER NOT NULL DEFAULT 1
             )
             """
         )
@@ -134,6 +143,16 @@ def init_db() -> None:
         )
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS serial_stats (
+                day TEXT NOT NULL,
+                code INTEGER NOT NULL,
+                views INTEGER NOT NULL,
+                PRIMARY KEY (day, code)
+            )
+            """
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
                 username TEXT
@@ -145,6 +164,16 @@ def init_db() -> None:
         _ensure_column(conn, "movie_items", "source_message_id", "INTEGER")
         _ensure_column(conn, "upload_sessions", "status_message_id", "INTEGER")
         _ensure_column(conn, "upload_sessions", "allow_more", "INTEGER")
+        _ensure_column(conn, "admins", "can_manage_admins", "INTEGER")
+        _ensure_column(conn, "admins", "can_manage_channels", "INTEGER")
+        _ensure_column(conn, "admins", "can_add_serial", "INTEGER")
+        _ensure_column(conn, "admins", "can_add_part", "INTEGER")
+        _ensure_column(conn, "admins", "can_broadcast", "INTEGER")
+        _ensure_column(conn, "admins", "can_view_lists", "INTEGER")
+        _ensure_column(conn, "admins", "can_view_logs", "INTEGER")
+        _ensure_column(conn, "admins", "can_view_stats", "INTEGER")
+        _ensure_column(conn, "admins", "can_backup", "INTEGER")
+        _fill_null_admin_perms(conn)
         _ensure_column(conn, "users", "username", "TEXT")
         _migrate_movies(conn)
         conn.commit()
@@ -155,11 +184,37 @@ def ensure_owner() -> None:
         add_admin(OWNER_ID)
 
 
-def add_admin(user_id: int) -> None:
+def add_admin(user_id: int, permissions: Optional[Dict[str, int]] = None) -> None:
+    permissions = permissions or {}
     with _connect() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO admins (user_id) VALUES (?)",
-            (user_id,),
+            """
+            INSERT OR IGNORE INTO admins (
+                user_id,
+                can_manage_admins,
+                can_manage_channels,
+                can_add_serial,
+                can_add_part,
+                can_broadcast,
+                can_view_lists,
+                can_view_logs,
+                can_view_stats,
+                can_backup
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                int(permissions.get("can_manage_admins", 1)),
+                int(permissions.get("can_manage_channels", 1)),
+                int(permissions.get("can_add_serial", 1)),
+                int(permissions.get("can_add_part", 1)),
+                int(permissions.get("can_broadcast", 1)),
+                int(permissions.get("can_view_lists", 1)),
+                int(permissions.get("can_view_logs", 1)),
+                int(permissions.get("can_view_stats", 1)),
+                int(permissions.get("can_backup", 1)),
+            ),
         )
         conn.commit()
 
@@ -182,6 +237,95 @@ def is_admin(user_id: int) -> bool:
     with _connect() as conn:
         cur = conn.execute("SELECT 1 FROM admins WHERE user_id = ?", (user_id,))
         return cur.fetchone() is not None
+
+
+def get_admin_permissions(user_id: int) -> Optional[Dict[str, int]]:
+    if OWNER_ID and user_id == OWNER_ID:
+        return {
+            "can_manage_admins": 1,
+            "can_manage_channels": 1,
+            "can_add_serial": 1,
+            "can_add_part": 1,
+            "can_broadcast": 1,
+            "can_view_lists": 1,
+            "can_view_logs": 1,
+            "can_view_stats": 1,
+            "can_backup": 1,
+        }
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT
+                can_manage_admins,
+                can_manage_channels,
+                can_add_serial,
+                can_add_part,
+                can_broadcast,
+                can_view_lists,
+                can_view_logs,
+                can_view_stats,
+                can_backup
+            FROM admins
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "can_manage_admins": int(row["can_manage_admins"] or 1),
+            "can_manage_channels": int(row["can_manage_channels"] or 1),
+            "can_add_serial": int(row["can_add_serial"] or 1),
+            "can_add_part": int(row["can_add_part"] or 1),
+            "can_broadcast": int(row["can_broadcast"] or 1),
+            "can_view_lists": int(row["can_view_lists"] or 1),
+            "can_view_logs": int(row["can_view_logs"] or 1),
+            "can_view_stats": int(row["can_view_stats"] or 1),
+            "can_backup": int(row["can_backup"] or 1),
+        }
+
+
+def set_admin_permissions(user_id: int, permissions: Dict[str, int]) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            UPDATE admins
+            SET
+                can_manage_admins = ?,
+                can_manage_channels = ?,
+                can_add_serial = ?,
+                can_add_part = ?,
+                can_broadcast = ?,
+                can_view_lists = ?,
+                can_view_logs = ?,
+                can_view_stats = ?,
+                can_backup = ?
+            WHERE user_id = ?
+            """,
+            (
+                int(permissions.get("can_manage_admins", 0)),
+                int(permissions.get("can_manage_channels", 0)),
+                int(permissions.get("can_add_serial", 0)),
+                int(permissions.get("can_add_part", 0)),
+                int(permissions.get("can_broadcast", 0)),
+                int(permissions.get("can_view_lists", 0)),
+                int(permissions.get("can_view_logs", 0)),
+                int(permissions.get("can_view_stats", 0)),
+                int(permissions.get("can_backup", 0)),
+                user_id,
+            ),
+        )
+        conn.commit()
+
+
+def has_admin_permission(user_id: int, permission: str) -> bool:
+    if OWNER_ID and user_id == OWNER_ID:
+        return True
+    perms = get_admin_permissions(user_id)
+    if not perms:
+        return False
+    return bool(perms.get(permission, 0))
 
 
 def add_channel(
@@ -508,6 +652,55 @@ def get_recent_days(limit: int = 7) -> List[Tuple[str, int]]:
         return [(row["day"], row["total"]) for row in cur.fetchall()]
 
 
+def record_serial_view(day: str, code: int) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO serial_stats (day, code, views)
+            VALUES (?, ?, 1)
+            ON CONFLICT(day, code) DO UPDATE SET views = views + 1
+            """,
+            (day, code),
+        )
+        conn.commit()
+
+
+def get_serial_day_stats(day: str) -> Tuple[int, List[Tuple[str, int]]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT COALESCE(SUM(views), 0) AS total FROM serial_stats WHERE day = ?",
+            (day,),
+        )
+        total = cur.fetchone()["total"]
+        cur = conn.execute(
+            """
+            SELECT code, views
+            FROM serial_stats
+            WHERE day = ?
+            ORDER BY views DESC, code ASC
+            LIMIT 10
+            """,
+            (day,),
+        )
+        top = [(str(row["code"]), row["views"]) for row in cur.fetchall()]
+        return total, top
+
+
+def get_serial_recent_days(limit: int = 7) -> List[Tuple[str, int]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT day, SUM(views) AS total
+            FROM serial_stats
+            GROUP BY day
+            ORDER BY day DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [(row["day"], row["total"]) for row in cur.fetchall()]
+
+
 def add_user(user_id: int, username: Optional[str] = None) -> None:
     with _connect() as conn:
         conn.execute(
@@ -641,3 +834,21 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, col_type: 
     if column in columns:
         return
     conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+
+
+def _fill_null_admin_perms(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        UPDATE admins
+        SET
+            can_manage_admins = COALESCE(can_manage_admins, 1),
+            can_manage_channels = COALESCE(can_manage_channels, 1),
+            can_add_serial = COALESCE(can_add_serial, 1),
+            can_add_part = COALESCE(can_add_part, 1),
+            can_broadcast = COALESCE(can_broadcast, 1),
+            can_view_lists = COALESCE(can_view_lists, 1),
+            can_view_logs = COALESCE(can_view_logs, 1),
+            can_view_stats = COALESCE(can_view_stats, 1),
+            can_backup = COALESCE(can_backup, 1)
+        """
+    )
