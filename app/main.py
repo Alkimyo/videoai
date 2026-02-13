@@ -16,7 +16,7 @@ from app.config import (
     WEBAPP_PORT,
 )
 from app.db import ensure_owner, init_db
-from app.handlers import _log_event, router
+from app.handlers import _log_event, router, vip_reminder_loop
 
 
 def _safe_text(value: str | None, limit: int = 500) -> str:
@@ -121,6 +121,11 @@ def main() -> None:
     dp.callback_query.middleware(UserCallbackLogMiddleware())
     dp.include_router(router)
     dp.startup.register(on_startup)
+
+    async def start_reminders(bot: Bot) -> None:
+        dp["vip_task"] = asyncio.create_task(vip_reminder_loop(bot))
+
+    dp.startup.register(start_reminders)
 
     if WEBAPP_ENABLED or WEBHOOK_URL:
         run_webapp(bot, dp)

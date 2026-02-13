@@ -1,17 +1,25 @@
 services:
   - type: worker
-    name: kinobot
+    name: dramalaruzbekbot
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python -m app
     autoDeploy: true
+    disk:
+      name: dramalaruzbekbot-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
       - key: BOT_TOKEN
         sync: false
       - key: OWNER_ID
         sync: false
       - key: DB_PATH
-        value: data/bot.db
+        value: /data/bot.db
+      - key: LOG_PATH
+        value: /data/bot.log
+      - key: WEBAPP_ENABLED
+        value: "0"
       - key: SOURCE_CHANNEL_ID
         sync: false
