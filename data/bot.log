@@ -1617,3 +1617,78 @@
 2026-02-13T23:22:09.768107 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3178 text=/admin
 2026-02-13T23:22:12.890312 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:backup message_id=3179
 2026-02-13T23:22:13.494909 backup_sent user_id=6499839380
+2026-02-14T01:00:53.669056 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.TEXT message_id=3181 text=/admin
+2026-02-14T01:00:57.245931 user_action user_id=5792951787 chat_id=5792951787 username=humble_student1 data=admin:serials message_id=3182
+2026-02-14T01:00:59.812401 user_action user_id=5792951787 chat_id=5792951787 username=humble_student1 data=admin:back message_id=3182
+2026-02-14T01:01:03.363503 user_action user_id=5792951787 chat_id=5792951787 username=humble_student1 data=admin:help message_id=3182
+2026-02-14T01:02:29.194916 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.DOCUMENT message_id=3183 text=/restoredb
+2026-02-14T01:03:30.537595 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.DOCUMENT message_id=3185 text=/restoredb
+2026-02-14T01:03:30.668848 restore_db_start user_id=6499839380
+2026-02-14T01:03:40.125437 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3187 text=/restoredb
+2026-02-14T01:03:40.257890 restore_db_start user_id=6499839380
+2026-02-14T01:03:48.147019 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.DOCUMENT message_id=3189 text=/restoredb
+2026-02-14T01:03:48.450236 restore_db_start user_id=6499839380
+2026-02-14T01:04:02.215008 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3191 text=/restoredb
+2026-02-14T01:04:02.217090 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.DOCUMENT message_id=3192 text=/restoredb
+2026-02-14T01:04:02.342102 restore_db_start user_id=6499839380
+2026-02-14T01:04:02.575612 restore_db_start user_id=6499839380
+2026-02-14T01:05:07.106896 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3195 text=/restoredb
+2026-02-14T01:05:07.110619 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.DOCUMENT message_id=3196 text=
+2026-02-14T01:05:07.248376 restore_db_start user_id=6499839380
+2026-02-14T01:05:12.007434 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=restoredb:confirm message_id=3198
+2026-02-14T01:05:12.214792 restore_db_success user_id=6499839380 backup=/tmp/serialbot-db-backup-20260214-010512.db
+2026-02-14T01:05:18.453187 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3199 text=/admin
+2026-02-14T01:05:21.023875 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:serials message_id=3200
+2026-02-14T01:05:29.486116 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3201 text=/start
+2026-02-14T01:05:29.487066 user_start user_id=6499839380
+2026-02-14T01:05:32.455373 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=user:serials message_id=3202
+2026-02-14T01:05:36.819545 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3204 text=➡️ Keyingi
+2026-02-14T01:07:52.990040 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3206 text=/admin
+2026-02-14T01:07:55.538749 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:serials message_id=3207
+2026-02-14T01:07:57.705022 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:serials:1 message_id=3207
+2026-02-14T01:08:37.132185 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:serials:0 message_id=3207
+2026-02-14T01:08:45.106872 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3208 text=➡️ Keyingi
+2026-02-14T01:09:48.053026 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3210 text=/start
+2026-02-14T01:09:48.054410 user_start user_id=6499839380
+2026-02-14T01:09:51.049963 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=user:serials message_id=3211
+2026-02-14T01:09:54.576403 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3213 text=➡️ Keyingi
+2026-02-14T01:09:59.859175 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3215 text=➡️ Keyingi
+2026-02-14T01:10:06.794314 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3217 text=⬅️ Oldingi
+2026-02-14T01:10:11.938010 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3219 text=➡️ Keyingi
+2026-02-14T01:10:23.101246 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3221 text=Shunqor
+2026-02-14T01:10:26.487740 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=serialpart:27:20 message_id=3222
+2026-02-14T01:10:26.887069 serial_part_sent user_id=6499839380 serial_id=27 part=20
+2026-02-14T01:10:30.580616 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3224 text=Sirli sinf
+2026-02-14T01:10:32.835220 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=serialpart:32:4 message_id=3225
+2026-02-14T01:10:33.234525 serial_part_sent user_id=6499839380 serial_id=32 part=4
+2026-02-14T01:10:34.471852 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3227 text=Aqldan ozgan ammo hammasi joyida
+2026-02-14T01:10:38.460016 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=serialpart:33:3 message_id=3228
+2026-02-14T01:10:39.242068 serial_part_sent user_id=6499839380 serial_id=33 part=3
+2026-02-14T01:10:40.886035 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=serialpart:33:4 message_id=3229
+2026-02-14T01:10:41.510713 serial_part_sent user_id=6499839380 serial_id=33 part=4
+2026-02-14T01:10:43.067620 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=serialpart:33:14 message_id=3230
+2026-02-14T01:10:43.460567 serial_part_sent user_id=6499839380 serial_id=33 part=14
+2026-02-14T01:10:45.121486 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=serialpart:33:12 message_id=3231
+2026-02-14T01:10:45.632003 serial_part_sent user_id=6499839380 serial_id=33 part=12
+2026-02-14T01:10:49.012991 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3233 text=⬅️ Oldingi
+2026-02-14T01:10:52.800444 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3235 text=⭐ Trigger
+2026-02-14T01:10:56.850170 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=serialpart:7:9 message_id=3236
+2026-02-14T01:10:57.477188 serial_part_sent user_id=6499839380 serial_id=7 part=9
+2026-02-14T01:10:59.450641 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=serialpart:7:6 message_id=3237
+2026-02-14T01:10:59.963529 serial_part_sent user_id=6499839380 serial_id=7 part=6
+2026-02-14T01:11:04.270618 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3239 text=Kyon-U va Pari
+2026-02-14T01:11:06.931573 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3241 text=➡️ Keyingi
+2026-02-14T01:11:10.521890 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3243 text=Hissiyotlar do'koni
+2026-02-14T01:11:13.383617 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=serialpart:28:6 message_id=3244
+2026-02-14T01:11:13.789682 serial_part_sent user_id=6499839380 serial_id=28 part=6
+2026-02-14T01:11:21.162552 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3246 text=/admin
+2026-02-14T01:11:24.342725 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:addserial message_id=3247
+2026-02-14T01:11:24.354053 serial_add_start user_id=6499839380
+2026-02-14T01:12:08.877212 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=Excel_student msg_type=ContentType.TEXT message_id=3248 text=/admin
+2026-02-14T01:12:12.582089 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:backup message_id=3249
+2026-02-14T01:12:13.386298 backup_sent user_id=6499839380
+2026-02-14T01:12:18.218850 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=serial:cancel message_id=3247
+2026-02-14T01:12:24.066795 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:serials message_id=3247
+2026-02-14T01:12:26.912320 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:serials:1 message_id=3247
+2026-02-14T01:12:29.572414 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:serials:0 message_id=3247
+2026-02-14T01:12:37.315672 user_action user_id=6499839380 chat_id=6499839380 username=Excel_student data=admin:back message_id=3247

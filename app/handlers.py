@@ -3021,7 +3021,7 @@ async def movie_text_handler(message: Message):
     if raw in {"⬅️ Oldingi", "➡️ Keyingi"}:
         state = USER_SERIALS_LIST.get(message.from_user.id)
         if not state:
-            await message.answer("Dramalar ro'yxati topilmadi.", reply_markup=user_keyboard())
+            await _send_user_serials_menu(message, page=0)
             return
         mode = state.get("mode") or "list"
         page = int(state.get("page") or 0)
