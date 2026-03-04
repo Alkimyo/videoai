@@ -1,0 +1,3 @@
+/setuserbotsession <session_string>
+/setuserbotapiid <raqam>
+/setuserbotapihash <hash>

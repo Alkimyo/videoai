@@ -4,6 +4,13 @@ from aiogram.types import InlineKeyboardButton, KeyboardButton, ReplyKeyboardMar
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
+def _pretty_title(title: str) -> str:
+    clean = (title or "").strip()
+    if not clean:
+        return "🎬 DRAMA 🎬"
+    return f"🎬 {clean.upper()} 🎬"
+
+
 def subscribe_keyboard(channels: Iterable[dict]):
     kb = InlineKeyboardBuilder()
     for channel in channels:
@@ -90,6 +97,7 @@ def user_keyboard():
     kb = InlineKeyboardBuilder()
     kb.button(text="Drama kodini yuborish", callback_data="user:sendcode")
     kb.button(text="Dramalar ro'yxati", callback_data="user:serials")
+    kb.button(text="Top dramalar", callback_data="user:toplikes")
     kb.button(text="Drama qidirish", callback_data="user:search")
     kb.button(text="Admin bilan bog'lanish", callback_data="user:contact")
     kb.button(text="VIP haqida", callback_data="user:vipinfo")
@@ -123,6 +131,9 @@ def serial_parts_keyboard(
     page: int,
     per_page: int,
     share_link: Optional[str] = None,
+    rating: int = 0,
+    likes_count: int = 0,
+    dislikes_count: int = 0,
 ):
     kb = InlineKeyboardBuilder()
     parts_list = list(parts)
@@ -153,6 +164,18 @@ def serial_parts_keyboard(
         )
     if nav_buttons:
         kb.row(*nav_buttons)
+    if likes_count < 0:
+        likes_count = 0
+    if likes_count < 0:
+        likes_count = 0
+    if dislikes_count < 0:
+        dislikes_count = 0
+    like_label = "👍✅" if rating == 1 else "👍"
+    dislike_label = "👎✅" if rating == -1 else "👎"
+    kb.row(
+        InlineKeyboardButton(text=f"{like_label} {likes_count}", callback_data=f"user:rate:1:{serial_id}"),
+        InlineKeyboardButton(text=f"{dislike_label} {dislikes_count}", callback_data=f"user:rate:-1:{serial_id}"),
+    )
     if share_link:
         kb.row(InlineKeyboardButton(text="Ulashish", url=share_link))
     return kb.as_markup()
@@ -240,20 +263,26 @@ def serials_list_keyboard(serials: Iterable[dict], page: int, total_pages: int):
     return kb.as_markup()
 
 
-def user_serials_keyboard(serials: Iterable[dict], page: int, total_pages: int):
+def user_serials_keyboard(serials: Iterable[dict], page: int, total_pages: int, sort_key: str = "az"):
     kb = InlineKeyboardBuilder()
+    kb.row(
+        InlineKeyboardButton(text="A-Z", callback_data=f"user:serials:az:0"),
+        InlineKeyboardButton(text="Kod", callback_data=f"user:serials:code:0"),
+        InlineKeyboardButton(text="Yangi", callback_data=f"user:serials:new:0"),
+        InlineKeyboardButton(text="Top", callback_data=f"user:serials:top:0"),
+    )
     for item in serials:
         title = item.get("title") or ""
-        short_title = title if len(title) <= 32 else f"{title[:29]}..."
-        text = f"{item.get('code')} - {short_title}"
+        short_title = title if len(title) <= 28 else f"{title[:25]}..."
+        text = _pretty_title(short_title)
         kb.button(text=text, callback_data=f"user:serial:{item.get('id')}")
-    kb.adjust(1)
+    kb.adjust(2)
     nav_buttons = []
     if page > 0:
         nav_buttons.append(
             InlineKeyboardButton(
                 text="<",
-                callback_data=f"user:serials:{page - 1}",
+                callback_data=f"user:serials:{sort_key}:{page - 1}",
             )
         )
     nav_buttons.append(
@@ -263,7 +292,7 @@ def user_serials_keyboard(serials: Iterable[dict], page: int, total_pages: int):
         nav_buttons.append(
             InlineKeyboardButton(
                 text=">",
-                callback_data=f"user:serials:{page + 1}",
+                callback_data=f"user:serials:{sort_key}:{page + 1}",
             )
         )
     if nav_buttons:
@@ -297,7 +326,7 @@ def user_serials_menu_keyboard(
     for item in serials:
         title = item.get("title") or ""
         vip_mark = "⭐ " if item.get("is_vip") else ""
-        label = f"{vip_mark}{title.strip()}".strip()
+        label = _pretty_title(f"{vip_mark}{title.strip()}".strip())
         if not label:
             continue
         add_len = len(label) + (1 if current_row else 0)
@@ -366,6 +395,8 @@ def post_link_keyboard(link: str):
     kb.button(text="Dramani ko'rish", url=link)
     kb.adjust(1)
     return kb.as_markup()
+
+
 
 
 def post_channel_keyboard(channels: Iterable[dict]):

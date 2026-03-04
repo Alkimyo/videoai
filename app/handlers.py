@@ -87,6 +87,12 @@ from app.db import (
     unblock_user,
     get_blocked_users,
     is_blocked_user,
+    get_serial_rating,
+    set_serial_rating,
+    get_serial_rating_counts,
+    get_serial_rating_like_counts_map,
+    get_top_liked_serials,
+    rename_serial,
 )
 from app.keyboards import (
     admin_back_keyboard,
@@ -129,7 +135,7 @@ SERIAL_PARTS_PER_PAGE = 20
 SERIALS_PER_PAGE = 20
 USERS_PER_PAGE = 20
 ADMINS_PER_PAGE = 20
-USER_SERIALS_PER_PAGE = 20
+USER_SERIALS_PER_PAGE = 30
 LOG_QUERY_ADMINS: set[int] = set()
 ADMIN_ADD_SESSIONS: dict[int, dict[str, object]] = {}
 RESTORE_DB_SESSIONS: dict[int, dict[str, object]] = {}
@@ -175,6 +181,9 @@ ADMIN_PERMISSION_LABELS = {
     "can_view_stats": "Statistikani ko'rish",
     "can_backup": "Backup olish",
 }
+
+SERIAL_RENAME_SESSIONS: dict[int, int] = {}
+SERIAL_BANNER_SESSIONS: dict[int, int] = {}
 
 ADMIN_PERMISSION_KEYS = list(ADMIN_PERMISSION_LABELS.keys())
 
@@ -1164,7 +1173,33 @@ async def vip_join_callback(callback: CallbackQuery):
 async def user_serials_callback(callback: CallbackQuery):
     if not await ensure_subscribed_callback(callback):
         return
-    await _send_user_serials_menu(callback.message, page=0)
+    await _render_user_serials_page(callback, page=0, sort_key="az")
+
+
+@router.callback_query(F.data == "user:toplikes")
+async def user_toplikes_callback(callback: CallbackQuery):
+    if not await ensure_subscribed_callback(callback):
+        return
+    include_vip = _include_vip_serials(callback.from_user.id)
+    top = get_top_liked_serials(20, include_vip)
+    if not top:
+        await _safe_edit_or_answer(callback.message, "Dramalar yo'q.")
+        return
+    serials = [
+        {"id": item["id"], "code": item["code"], "title": item["title"], "is_vip": item["is_vip"]}
+        for item in top
+    ]
+    lines = ["Top dramalar:"]
+    for idx, item in enumerate(top, start=1):
+        title = _pretty_title_text(item.get("title") or "-")
+        likes = int(item.get("likes") or 0)
+        lines.append(f"{idx}. {title} ({likes})")
+    text = "\n".join(lines)
+    await _safe_edit_or_answer(
+        callback.message,
+        text,
+        reply_markup=user_serials_keyboard(serials, page=0, total_pages=1, sort_key="top"),
+    )
 
 
 @router.callback_query(F.data == "user:search")
@@ -1195,7 +1230,7 @@ async def user_search_page_callback(callback: CallbackQuery):
         await callback.answer("Natija topilmadi.", show_alert=True)
         return
     parts = callback.data.split(":")
-    if len(parts) != 3:
+    if len(parts) != 4:
         await callback.answer("Xatolik.", show_alert=True)
         return
     try:
@@ -1236,15 +1271,25 @@ async def user_serials_page_callback(callback: CallbackQuery):
     if not await ensure_subscribed_callback(callback):
         return
     parts = callback.data.split(":")
-    if len(parts) != 3:
+    sort_key = "az"
+    page = 0
+    if len(parts) == 3:
+        try:
+            page = int(parts[2])
+        except ValueError:
+            await callback.answer("Xatolik.", show_alert=True)
+            return
+    elif len(parts) == 4:
+        sort_key = parts[2]
+        try:
+            page = int(parts[3])
+        except ValueError:
+            await callback.answer("Xatolik.", show_alert=True)
+            return
+    else:
         await callback.answer("Xatolik.", show_alert=True)
         return
-    try:
-        page = int(parts[2])
-    except ValueError:
-        await callback.answer("Xatolik.", show_alert=True)
-        return
-    await _render_user_serials_page(callback, page=page)
+    await _render_user_serials_page(callback, page=page, sort_key=sort_key)
 
 
 @router.callback_query(F.data.startswith("user:serial:"))
@@ -1269,6 +1314,117 @@ async def user_serial_callback(callback: CallbackQuery):
     ok = await _show_serial_parts(callback.message, serial["id"])
     if not ok:
         await callback.answer("Dramada qismlar yo'q.", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("user:rate:"))
+async def user_like_toggle_callback(callback: CallbackQuery):
+    if not await ensure_subscribed_callback(callback):
+        return
+    parts = callback.data.split(":")
+    if len(parts) != 4:
+        await callback.answer()
+        return
+    try:
+        value = int(parts[2])
+        serial_id = int(parts[3])
+    except ValueError:
+        await callback.answer()
+        return
+    serial = get_serial_by_id(serial_id)
+    if not serial:
+        await callback.answer()
+        return
+    if not await _ensure_serial_access(callback.message, serial, user_id=callback.from_user.id):
+        return
+    set_serial_rating(callback.from_user.id, serial_id, value)
+    serial_parts = get_serial_parts(serial_id)
+    if serial.get("is_vip") and not _is_admin_user(callback.from_user.id):
+        serial_parts = [
+            p for p in serial_parts if not _is_vip_part_expired(p.get("created_at"))
+        ]
+    part_numbers = [int(item["part"]) for item in serial_parts if item.get("part") is not None]
+    if not part_numbers:
+        await callback.answer()
+        return
+    likes_count, dislikes_count = get_serial_rating_counts(serial_id)
+    share_link = await _get_share_link(
+        callback.message.bot,
+        int(serial.get("code")),
+        serial.get("title") or "",
+        len(part_numbers),
+    )
+    reply_markup = serial_parts_keyboard(
+        serial_id,
+        part_numbers,
+        page=0,
+        per_page=SERIAL_PARTS_PER_PAGE,
+        share_link=share_link,
+        rating=get_serial_rating(callback.from_user.id, serial_id),
+        likes_count=likes_count,
+        dislikes_count=dislikes_count,
+    )
+    await _safe_edit_reply_markup(
+        callback.message.bot,
+        callback.message.chat.id,
+        callback.message.message_id,
+        reply_markup,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("user:like:"))
+async def user_like_legacy_callback(callback: CallbackQuery):
+    if not await ensure_subscribed_callback(callback):
+        return
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        await callback.answer()
+        return
+    try:
+        serial_id = int(parts[2])
+    except ValueError:
+        await callback.answer()
+        return
+    serial = get_serial_by_id(serial_id)
+    if not serial:
+        await callback.answer()
+        return
+    if not await _ensure_serial_access(callback.message, serial, user_id=callback.from_user.id):
+        return
+    set_serial_rating(callback.from_user.id, serial_id, 1)
+    serial_parts = get_serial_parts(serial_id)
+    if serial.get("is_vip") and not _is_admin_user(callback.from_user.id):
+        serial_parts = [
+            p for p in serial_parts if not _is_vip_part_expired(p.get("created_at"))
+        ]
+    part_numbers = [int(item["part"]) for item in serial_parts if item.get("part") is not None]
+    if not part_numbers:
+        await callback.answer()
+        return
+    likes_count, dislikes_count = get_serial_rating_counts(serial_id)
+    share_link = await _get_share_link(
+        callback.message.bot,
+        int(serial.get("code")),
+        serial.get("title") or "",
+        len(part_numbers),
+    )
+    reply_markup = serial_parts_keyboard(
+        serial_id,
+        part_numbers,
+        page=0,
+        per_page=SERIAL_PARTS_PER_PAGE,
+        share_link=share_link,
+        rating=get_serial_rating(callback.from_user.id, serial_id),
+        likes_count=likes_count,
+        dislikes_count=dislikes_count,
+    )
+    await _safe_edit_reply_markup(
+        callback.message.bot,
+        callback.message.chat.id,
+        callback.message.message_id,
+        reply_markup,
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "noop")
@@ -1320,18 +1476,27 @@ async def serial_page_callback(callback: CallbackQuery):
     if not await _ensure_serial_access(callback.message, serial, user_id=callback.from_user.id):
         return
     serial_parts = get_serial_parts(serial_id)
+    if serial.get("is_vip") and not _is_admin_user(callback.from_user.id):
+        serial_parts = [
+            p for p in serial_parts if not _is_vip_part_expired(p.get("created_at"))
+        ]
     part_numbers = [int(item["part"]) for item in serial_parts if item.get("part") is not None]
     if not part_numbers:
         await callback.answer("Dramada qismlar yo'q.", show_alert=True)
         return
+    rating = get_serial_rating(callback.from_user.id, serial_id)
+    likes_count, dislikes_count = get_serial_rating_counts(serial_id)
     await _safe_edit_or_answer(
         callback.message,
-        f"{serial['title']} qismlari:",
+        f"{_pretty_title_text(serial['title'])} qismlari:",
         reply_markup=serial_parts_keyboard(
             serial_id,
             part_numbers,
             page=page,
             per_page=SERIAL_PARTS_PER_PAGE,
+            rating=rating,
+            likes_count=likes_count,
+            dislikes_count=dislikes_count,
         ),
     )
 
@@ -1357,6 +1522,13 @@ def _parse_part(raw: str) -> Optional[int]:
 
 def _now() -> str:
     return dt.datetime.utcnow().isoformat()
+
+
+def _pretty_title_text(title: str) -> str:
+    clean = (title or "").strip()
+    if not clean:
+        return "🎬 DRAMA 🎬"
+    return f"🎬 {clean.upper()} 🎬"
 
 
 def _log_event(event: str, user_id: Optional[int] = None, detail: str = "") -> None:
@@ -1711,6 +1883,8 @@ async def help_handler(message: Message):
             lines.append("/broadcast - reply bilan rasm/video yuborish")
             lines.append("/usend <@username|user_id> [text] - userbot orqali yuborish")
             lines.append("/post - kanalga post yaratish")
+        if _has_perm(message.from_user.id, "can_add_serial"):
+            lines.append("/renameserial <drama_kod> <yangi_nomi> - drama nomini o'zgartirish")
         lines.append("/vip - VIP holatini ko'rish")
         if message.from_user.id == OWNER_ID:
             lines.extend(
@@ -1778,6 +1952,39 @@ async def del_admin_handler(message: Message, command: CommandObject):
     del_admin(user_id)
     _log_event("admin_deleted", message.from_user.id, f"target_id={user_id}")
     await message.answer("Admin chiqarildi.")
+
+
+@router.message(Command("renameserial"))
+async def rename_serial_handler(message: Message, command: CommandObject):
+    if not _has_perm(message.from_user.id, "can_add_serial"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    if not command.args:
+        await message.answer("Foydalanish: /renameserial <drama_kod> <yangi_nomi>")
+        return
+    parts = command.args.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("Foydalanish: /renameserial <drama_kod> <yangi_nomi>")
+        return
+    code = _parse_code(parts[0])
+    if not code:
+        await message.answer("Kod faqat raqam bo'lishi kerak.")
+        return
+    new_title = parts[1].strip()
+    if not new_title:
+        await message.answer("Yangi nom bo'sh bo'lmasin.")
+        return
+    serial = get_serial_by_code(int(code))
+    if not serial:
+        await message.answer("Drama topilmadi.")
+        return
+    rename_serial(serial["id"], new_title)
+    await message.answer("Drama nomi yangilandi.")
+    _log_event(
+        "serial_renamed",
+        message.from_user.id,
+        f"serial_id={serial['id']} code={serial['code']}",
+    )
 
 
 @router.message(Command("addvip"))
@@ -2175,6 +2382,11 @@ async def admin_serial_callback(callback: CallbackQuery):
     if not serial:
         await callback.answer("Drama topilmadi.", show_alert=True)
         return
+    if _has_perm(callback.from_user.id, "can_add_serial"):
+        SERIAL_RENAME_SESSIONS[callback.from_user.id] = serial_id
+        await callback.message.answer(
+            "Drama nomini yuboring (bekor qilish: /cancel)."
+        )
     ok = await _show_serial_parts(callback.message, serial["id"])
     if not ok:
         await callback.answer("Dramada qismlar yo'q.", show_alert=True)
@@ -2417,22 +2629,47 @@ async def _render_vip_list(message: Message, page: int) -> None:
     await message.answer("\n".join(lines), reply_markup=vip_list_keyboard(page, total_pages))
 
 
-async def _render_user_serials_page(callback: CallbackQuery, page: int) -> None:
-    serials = get_serials()
+async def _render_user_serials_page(callback: CallbackQuery, page: int, sort_key: str = "az") -> None:
+    serials = _filter_serials_for_user(callback.from_user.id, get_serials())
     if not serials:
         await _safe_edit_or_answer(callback.message, "Dramalar yo'q.")
         return
+    sort_key = sort_key if sort_key in {"az", "code", "new", "top"} else "az"
+    if sort_key == "code":
+        serials = sorted(serials, key=lambda item: int(item.get("code") or 0))
+    elif sort_key == "new":
+        serials = sorted(
+            serials,
+            key=lambda item: item.get("created_at") or "",
+            reverse=True,
+        )
+    elif sort_key == "top":
+        ids = [int(item["id"]) for item in serials if item.get("id") is not None]
+        likes_map = get_serial_rating_like_counts_map(ids)
+        serials = sorted(
+            serials,
+            key=lambda item: (
+                -likes_map.get(int(item.get("id") or 0), 0),
+                (item.get("title") or "").casefold(),
+            ),
+        )
+    else:
+        serials = sorted(
+            serials,
+            key=lambda item: ((item.get("title") or "").casefold(), int(item.get("code") or 0)),
+        )
     total = len(serials)
     total_pages = max(1, (total + USER_SERIALS_PER_PAGE - 1) // USER_SERIALS_PER_PAGE)
     page = max(0, min(page, total_pages - 1))
     start = page * USER_SERIALS_PER_PAGE
     end = start + USER_SERIALS_PER_PAGE
     page_serials = serials[start:end]
-    text = f"Dramalar: {total} ta"
+    label = {"az": "A-Z", "code": "Kod", "new": "Yangi", "top": "Top"}.get(sort_key, "A-Z")
+    text = f"Dramalar ({label}): {total} ta"
     await _safe_edit_or_answer(
         callback.message,
         text,
-        reply_markup=user_serials_keyboard(page_serials, page, total_pages),
+        reply_markup=user_serials_keyboard(page_serials, page, total_pages, sort_key=sort_key),
     )
 
 
@@ -3093,6 +3330,7 @@ async def post_callback(callback: CallbackQuery):
             return
         session["channel_id"] = channel_id
         if session.get("serial_id"):
+            serial = get_serial_by_id(int(session["serial_id"]))
             session["state"] = "await_media"
             await callback.message.edit_text(
                 "Rasm va caption yuboring.",
@@ -3847,9 +4085,9 @@ async def post_code_handler(message: Message):
             "title": serial["title"],
             "code": serial["code"],
             "parts_count": parts_count,
-            "state": "await_media",
         }
     )
+    session["state"] = "await_media"
     await message.answer("Rasm va caption yuboring.", reply_markup=post_media_keyboard())
 
 
@@ -3961,7 +4199,15 @@ async def restore_db_callback(callback: CallbackQuery):
     _log_event("restore_db_success", callback.from_user.id, f"backup={backup_path}")
 
 
-@router.message(F.photo | F.document)
+@router.message(
+    F.photo | F.document,
+    lambda message: (
+        message
+        and message.from_user
+        and message.from_user.id in POST_SESSIONS
+        and POST_SESSIONS.get(message.from_user.id, {}).get("state") == "await_media"
+    ),
+)
 async def post_photo_handler(message: Message):
     if not _has_perm(message.from_user.id, "can_broadcast"):
         return
@@ -4009,6 +4255,8 @@ async def post_photo_handler(message: Message):
         message.from_user.id,
         f"serial_id={session['serial_id']} channel_id={session.get('channel_id')}",
     )
+
+
 async def _show_serial_parts(message: Message, serial_id: int) -> bool:
     parts = get_serial_parts(serial_id)
     serial = get_serial_by_id(serial_id)
@@ -4073,12 +4321,16 @@ async def _send_serial_part(
             page = index // SERIAL_PARTS_PER_PAGE
         except ValueError:
             page = 0
+    likes_count, dislikes_count = get_serial_rating_counts(serial_id)
     reply_markup = serial_parts_keyboard(
         serial_id,
         part_numbers_sorted or [part],
         page=page,
         per_page=SERIAL_PARTS_PER_PAGE,
         share_link=share_link,
+        rating=get_serial_rating(message.from_user.id, serial_id),
+        likes_count=likes_count,
+        dislikes_count=dislikes_count,
     )
     source_chat_id = item.get("source_chat_id")
     source_message_id = item.get("source_message_id")
@@ -4158,6 +4410,25 @@ async def serial_command_handler(message: Message, command: CommandObject):
 @router.message(F.text & ~F.text.startswith("/"))
 async def movie_text_handler(message: Message):
     if not await ensure_subscribed(message):
+        return
+    if message.from_user.id in SERIAL_RENAME_SESSIONS:
+        if not _has_perm(message.from_user.id, "can_add_serial"):
+            SERIAL_RENAME_SESSIONS.pop(message.from_user.id, None)
+            return
+        if message.text.strip().lower() in {"/cancel", "bekor"}:
+            SERIAL_RENAME_SESSIONS.pop(message.from_user.id, None)
+            await message.answer("Bekor qilindi.")
+            return
+        new_title = message.text.strip()
+        if not new_title:
+            await message.answer("Yangi nom bo'sh bo'lmasin.")
+            return
+        serial_id = SERIAL_RENAME_SESSIONS.pop(message.from_user.id, None)
+        if not serial_id:
+            return
+        rename_serial(serial_id, new_title)
+        await message.answer("Drama nomi yangilandi.")
+        _log_event("serial_renamed", message.from_user.id, f"serial_id={serial_id}")
         return
     if message.from_user.id in BROADCAST_TEXT_SESSIONS:
         await broadcast_text_handler(message)
@@ -4856,6 +5127,45 @@ async def _broadcast_serial_notification(
     return ok, failed
 
 
+async def _broadcast_serial_notification_userbot(
+    message: Message,
+    user_ids: list[int],
+    serial_id: int,
+    text: str,
+) -> tuple[int, int]:
+    prefs = get_serial_notification_map(serial_id)
+    ok = 0
+    failed = 0
+    try:
+        client = await get_userbot_client()
+    except UserbotError as err:
+        await message.answer(str(err))
+        return 0, len(user_ids)
+    for user_id in user_ids:
+        pref = prefs.get(user_id, {})
+        if pref.get("muted"):
+            continue
+        first_time = not pref.get("notified")
+        if first_time:
+            try:
+                await message.bot.send_message(
+                    chat_id=user_id,
+                    text=f"{text}\n\nBu drama uchun bildirishnomalarni o'chirishni xohlaysizmi?",
+                    reply_markup=_serial_notify_optout_keyboard(serial_id),
+                )
+                mark_serial_notification_sent(user_id, serial_id)
+                ok += 1
+            except Exception:
+                failed += 1
+            continue
+        try:
+            await client.send_message(user_id, text)
+            ok += 1
+        except Exception:
+            failed += 1
+    return ok, failed
+
+
 def _collect_broadcast_targets(kind: str) -> list[int]:
     blocked_ids = {int(uid) for uid in get_blocked_users()}
     if kind == "admins":
@@ -5017,7 +5327,12 @@ async def new_drama_broadcast_callback(callback: CallbackQuery):
         await callback.message.edit_text("Foydalanuvchilar topilmadi.")
         return
     text = _build_new_drama_text(serial["title"], int(serial["code"]))
-    ok, failed = await _broadcast_serial_notification(callback.message, targets, serial_id, text)
+    ok, failed = await _broadcast_serial_notification_userbot(
+        callback.message,
+        targets,
+        serial_id,
+        text,
+    )
     await callback.message.edit_text(f"Yuborildi: {ok}, xatolik: {failed}")
     _log_event(
         "broadcast_new_drama",
@@ -5055,7 +5370,12 @@ async def new_part_broadcast_callback(callback: CallbackQuery):
         await callback.message.edit_text("Foydalanuvchilar topilmadi.")
         return
     text = _build_new_part_text(serial["title"], int(serial["code"]), part)
-    ok, failed = await _broadcast_serial_notification(callback.message, targets, serial_id, text)
+    ok, failed = await _broadcast_serial_notification_userbot(
+        callback.message,
+        targets,
+        serial_id,
+        text,
+    )
     await callback.message.edit_text(f"Yuborildi: {ok}, xatolik: {failed}")
     _log_event(
         "broadcast_new_part",

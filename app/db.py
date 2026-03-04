@@ -63,7 +63,8 @@ def init_db() -> None:
                 code INTEGER NOT NULL UNIQUE,
                 title TEXT NOT NULL COLLATE NOCASE UNIQUE,
                 is_vip INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                banner_file_id TEXT
             )
             """
         )
@@ -176,6 +177,27 @@ def init_db() -> None:
         )
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS serial_likes (
+                user_id INTEGER NOT NULL,
+                serial_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, serial_id)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS serial_ratings (
+                user_id INTEGER NOT NULL,
+                serial_id INTEGER NOT NULL,
+                value INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, serial_id)
+            )
+            """
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
                 username TEXT
@@ -217,6 +239,7 @@ def init_db() -> None:
         _ensure_column(conn, "admins", "can_view_stats", "INTEGER")
         _ensure_column(conn, "admins", "can_backup", "INTEGER")
         _ensure_column(conn, "serials", "is_vip", "INTEGER")
+        _ensure_column(conn, "serials", "banner_file_id", "TEXT")
         _ensure_column(conn, "serial_parts", "created_at", "TEXT")
         _ensure_column(conn, "vip_users", "reminded_7d", "INTEGER")
         _fill_null_admin_perms(conn)
@@ -479,7 +502,7 @@ def get_serial_by_title(title: str) -> Optional[Dict[str, object]]:
 def get_serial_by_code(code: int) -> Optional[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
-            "SELECT id, code, title, is_vip, created_at FROM serials WHERE code = ?",
+            "SELECT id, code, title, is_vip, created_at, banner_file_id FROM serials WHERE code = ?",
             (code,),
         )
         row = cur.fetchone()
@@ -489,7 +512,7 @@ def get_serial_by_code(code: int) -> Optional[Dict[str, object]]:
 def get_serial_by_id(serial_id: int) -> Optional[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
-            "SELECT id, code, title, is_vip, created_at FROM serials WHERE id = ?",
+            "SELECT id, code, title, is_vip, created_at, banner_file_id FROM serials WHERE id = ?",
             (serial_id,),
         )
         row = cur.fetchone()
@@ -499,7 +522,7 @@ def get_serial_by_id(serial_id: int) -> Optional[Dict[str, object]]:
 def get_serials() -> List[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
-            "SELECT id, code, title, is_vip, created_at FROM serials ORDER BY code ASC"
+            "SELECT id, code, title, is_vip, created_at, banner_file_id FROM serials ORDER BY code ASC"
         )
         return [dict(row) for row in cur.fetchall()]
 
@@ -560,6 +583,17 @@ def set_serial_vip(serial_id: int, is_vip: int) -> None:
             (1 if is_vip else 0, serial_id),
         )
         conn.commit()
+
+
+def rename_serial(serial_id: int, title: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE serials SET title = ? WHERE id = ?",
+            (title, serial_id),
+        )
+        conn.commit()
+
+
 
 
 def add_serial_part(
@@ -895,6 +929,133 @@ def get_serial_total_views_map(codes: List[int]) -> Dict[int, int]:
     with _connect() as conn:
         cur = conn.execute(query, codes)
         return {int(row["code"]): int(row["total"]) for row in cur.fetchall()}
+
+
+def has_serial_like(user_id: int, serial_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT 1 FROM serial_likes WHERE user_id = ? AND serial_id = ?",
+            (user_id, serial_id),
+        )
+        return cur.fetchone() is not None
+
+
+def like_serial(user_id: int, serial_id: int, created_at: Optional[str] = None) -> None:
+    created_at = created_at or dt.datetime.utcnow().isoformat()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO serial_likes (user_id, serial_id, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (user_id, serial_id, created_at),
+        )
+        conn.commit()
+
+
+def unlike_serial(user_id: int, serial_id: int) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "DELETE FROM serial_likes WHERE user_id = ? AND serial_id = ?",
+            (user_id, serial_id),
+        )
+        conn.commit()
+
+
+def get_serial_like_count(serial_id: int) -> int:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT COUNT(1) AS cnt FROM serial_likes WHERE serial_id = ?",
+            (serial_id,),
+        )
+        return int(cur.fetchone()["cnt"])
+
+
+def get_serial_like_counts_map(serial_ids: List[int]) -> Dict[int, int]:
+    if not serial_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(serial_ids))
+    query = (
+        f"SELECT serial_id, COUNT(1) AS cnt FROM serial_likes "
+        f"WHERE serial_id IN ({placeholders}) GROUP BY serial_id"
+    )
+    with _connect() as conn:
+        cur = conn.execute(query, serial_ids)
+        return {int(row["serial_id"]): int(row["cnt"]) for row in cur.fetchall()}
+
+
+def get_top_liked_serials(limit: int, include_vip: bool) -> List[Dict[str, object]]:
+    where = "" if include_vip else "WHERE s.is_vip = 0"
+    query = f"""
+        SELECT s.id, s.code, s.title, s.is_vip, COUNT(r.user_id) AS likes
+        FROM serials AS s
+        LEFT JOIN serial_ratings AS r ON r.serial_id = s.id AND r.value = 1
+        {where}
+        GROUP BY s.id
+        ORDER BY likes DESC, s.title ASC
+        LIMIT ?
+    """
+    with _connect() as conn:
+        cur = conn.execute(query, (limit,))
+        return [dict(row) for row in cur.fetchall()]
+
+
+def set_serial_rating(user_id: int, serial_id: int, value: int) -> None:
+    rating = 1 if value >= 1 else -1
+    created_at = dt.datetime.utcnow().isoformat()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO serial_ratings (user_id, serial_id, value, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, serial_id, rating, created_at),
+        )
+        conn.commit()
+
+
+def get_serial_rating(user_id: int, serial_id: int) -> int:
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT value FROM serial_ratings WHERE user_id = ? AND serial_id = ?",
+            (user_id, serial_id),
+        )
+        row = cur.fetchone()
+        return int(row["value"]) if row else 0
+
+
+def get_serial_rating_counts(serial_id: int) -> Tuple[int, int]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT value, COUNT(1) AS cnt
+            FROM serial_ratings
+            WHERE serial_id = ?
+            GROUP BY value
+            """,
+            (serial_id,),
+        )
+        likes = 0
+        dislikes = 0
+        for row in cur.fetchall():
+            if int(row["value"]) == 1:
+                likes = int(row["cnt"])
+            elif int(row["value"]) == -1:
+                dislikes = int(row["cnt"])
+        return likes, dislikes
+
+
+def get_serial_rating_like_counts_map(serial_ids: List[int]) -> Dict[int, int]:
+    if not serial_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(serial_ids))
+    query = (
+        f"SELECT serial_id, COUNT(1) AS cnt FROM serial_ratings "
+        f"WHERE value = 1 AND serial_id IN ({placeholders}) GROUP BY serial_id"
+    )
+    with _connect() as conn:
+        cur = conn.execute(query, serial_ids)
+        return {int(row["serial_id"]): int(row["cnt"]) for row in cur.fetchall()}
 
 
 def get_expired_vip_serial_parts(cutoff: str, limit: int = 200) -> List[Dict[str, object]]:
