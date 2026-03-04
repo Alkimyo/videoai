@@ -170,6 +170,35 @@ def users_keyboard(page: int, total_pages: int):
     return kb.as_markup()
 
 
+def users_manage_keyboard(users: Iterable[dict], blocked_ids: set[int], page: int, total_pages: int):
+    kb = InlineKeyboardBuilder()
+    for user in users:
+        user_id = int(user.get("user_id") or 0)
+        label = f"@{user.get('username')}" if user.get("username") else str(user_id)
+        is_blocked = user_id in blocked_ids
+        action_text = "Blokdan chiqarish" if is_blocked else "Bloklash"
+        action = "unblock" if is_blocked else "block"
+        kb.row(
+            InlineKeyboardButton(text=label, callback_data="noop"),
+            InlineKeyboardButton(
+                text=action_text,
+                callback_data=f"admin:user:{action}:{user_id}:{page}",
+            ),
+        )
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton(text="<", callback_data=f"admin:users:{page - 1}"))
+    nav_buttons.append(
+        InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="noop")
+    )
+    if page + 1 < total_pages:
+        nav_buttons.append(InlineKeyboardButton(text=">", callback_data=f"admin:users:{page + 1}"))
+    if nav_buttons:
+        kb.row(*nav_buttons)
+    kb.row(InlineKeyboardButton(text="Ortga", callback_data="admin:back"))
+    return kb.as_markup()
+
+
 def serials_list_keyboard(serials: Iterable[dict], page: int, total_pages: int):
     kb = InlineKeyboardBuilder()
     for item in serials:
@@ -327,9 +356,8 @@ def user_search_results_keyboard(serials: Iterable[dict], page: int, total_pages
 
 def post_media_keyboard():
     kb = InlineKeyboardBuilder()
-    kb.button(text="Rasmsiz", callback_data="post:skip")
     kb.button(text="Bekor", callback_data="post:cancel")
-    kb.adjust(2)
+    kb.adjust(1)
     return kb.as_markup()
 
 
@@ -337,6 +365,16 @@ def post_link_keyboard(link: str):
     kb = InlineKeyboardBuilder()
     kb.button(text="Dramani ko'rish", url=link)
     kb.adjust(1)
+    return kb.as_markup()
+
+
+def post_channel_keyboard(channels: Iterable[dict]):
+    kb = InlineKeyboardBuilder()
+    for channel in channels:
+        title = channel.get("title") or channel.get("username") or str(channel.get("chat_id"))
+        kb.button(text=title, callback_data=f"post:channel:{channel.get('chat_id')}")
+    kb.adjust(1)
+    kb.button(text="Bekor", callback_data="post:cancel")
     return kb.as_markup()
 
 

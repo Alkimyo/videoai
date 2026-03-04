@@ -15,8 +15,8 @@ from app.config import (
     WEBAPP_HOST,
     WEBAPP_PORT,
 )
-from app.db import ensure_owner, init_db
-from app.handlers import _log_event, router, vip_reminder_loop
+from app.db import ensure_owner, init_db, is_blocked_user
+from app.handlers import _log_event, router, vip_reminder_loop, backup_schedule_loop, cache_cleanup_loop
 
 
 def _safe_text(value: str | None, limit: int = 500) -> str:
@@ -53,6 +53,20 @@ class UserCallbackLogMiddleware(BaseMiddleware):
                 f"username={username} data={data_text} message_id={message_id}"
             )
             _log_event("user_action", event.from_user.id, detail)
+        return await handler(event, data)
+
+
+class BlockedUserMessageMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event: Message, data: dict):
+        if event and event.from_user and is_blocked_user(event.from_user.id):
+            return
+        return await handler(event, data)
+
+
+class BlockedUserCallbackMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event: CallbackQuery, data: dict):
+        if event and event.from_user and is_blocked_user(event.from_user.id):
+            return
         return await handler(event, data)
 
 
@@ -117,6 +131,8 @@ def main() -> None:
 
     bot = Bot(BOT_TOKEN)
     dp = Dispatcher()
+    dp.message.middleware(BlockedUserMessageMiddleware())
+    dp.callback_query.middleware(BlockedUserCallbackMiddleware())
     dp.message.middleware(UserMessageLogMiddleware())
     dp.callback_query.middleware(UserCallbackLogMiddleware())
     dp.include_router(router)
@@ -124,6 +140,8 @@ def main() -> None:
 
     async def start_reminders(bot: Bot) -> None:
         dp["vip_task"] = asyncio.create_task(vip_reminder_loop(bot))
+        dp["backup_task"] = asyncio.create_task(backup_schedule_loop(bot))
+        dp["cache_task"] = asyncio.create_task(cache_cleanup_loop())
 
     dp.startup.register(start_reminders)
 

@@ -17,3 +17,28 @@ WEBAPP_PORT = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "10000")))
 WEBAPP_ENABLED = os.getenv("WEBAPP_ENABLED", "1") == "1"
 
 SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID", "0") or 0)
+
+USERBOT_API_ID = int(os.getenv("USERBOT_API_ID", "0") or 0)
+USERBOT_API_HASH = os.getenv("USERBOT_API_HASH", "").strip()
+USERBOT_SESSION = os.getenv("USERBOT_SESSION", "").strip()
+IMPORT_GROUP_ID = int(os.getenv("IMPORT_GROUP_ID", "0") or 0)
+
+LOW_RESOURCE_MODE = os.getenv("LOW_RESOURCE_MODE", "0") == "1"
+VIP_REMINDER_INTERVAL = int(os.getenv("VIP_REMINDER_INTERVAL", "0") or 0) or (
+    10800 if LOW_RESOURCE_MODE else 3600
+)
+CONTACT_REPLY_MAXLEN = int(os.getenv("CONTACT_REPLY_MAXLEN", "0") or 0) or (
+    500 if LOW_RESOURCE_MODE else 3000
+)
+USERBOT_IDLE_TIMEOUT = int(os.getenv("USERBOT_IDLE_TIMEOUT", "0") or 0) or (
+    600 if LOW_RESOURCE_MODE else 0
+)
+BROADCAST_BATCH_EVERY = int(os.getenv("BROADCAST_BATCH_EVERY", "0") or 0) or (
+    50 if LOW_RESOURCE_MODE else 0
+)
+BROADCAST_BATCH_SLEEP = float(os.getenv("BROADCAST_BATCH_SLEEP", "0") or 0) or (
+    1.0 if LOW_RESOURCE_MODE else 0.0
+)
+CACHE_CLEAN_INTERVAL = int(os.getenv("CACHE_CLEAN_INTERVAL", "0") or 0) or (
+    3600 if LOW_RESOURCE_MODE else 0
+)

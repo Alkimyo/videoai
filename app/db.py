@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import datetime as dt
 from typing import Dict, List, Optional, Tuple
 
 from app.config import DB_PATH, OWNER_ID
@@ -77,6 +78,7 @@ def init_db() -> None:
                 caption TEXT,
                 source_chat_id INTEGER,
                 source_message_id INTEGER,
+                created_at TEXT,
                 UNIQUE(serial_id, part)
             )
             """
@@ -155,6 +157,25 @@ def init_db() -> None:
         )
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS blocked_users (
+                user_id INTEGER PRIMARY KEY,
+                blocked_at TEXT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS serial_notifications (
+                user_id INTEGER NOT NULL,
+                serial_id INTEGER NOT NULL,
+                muted INTEGER NOT NULL DEFAULT 0,
+                notified INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (user_id, serial_id)
+            )
+            """
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
                 username TEXT
@@ -196,6 +217,7 @@ def init_db() -> None:
         _ensure_column(conn, "admins", "can_view_stats", "INTEGER")
         _ensure_column(conn, "admins", "can_backup", "INTEGER")
         _ensure_column(conn, "serials", "is_vip", "INTEGER")
+        _ensure_column(conn, "serial_parts", "created_at", "TEXT")
         _ensure_column(conn, "vip_users", "reminded_7d", "INTEGER")
         _fill_null_admin_perms(conn)
         _ensure_column(conn, "users", "username", "TEXT")
@@ -548,14 +570,23 @@ def add_serial_part(
     caption: str,
     source_chat_id: Optional[int] = None,
     source_message_id: Optional[int] = None,
+    created_at: Optional[str] = None,
 ) -> None:
+    created_at = created_at or dt.datetime.utcnow().isoformat()
     with _connect() as conn:
         conn.execute(
             """
             INSERT INTO serial_parts (
-                serial_id, part, file_id, file_type, caption, source_chat_id, source_message_id
+                serial_id,
+                part,
+                file_id,
+                file_type,
+                caption,
+                source_chat_id,
+                source_message_id,
+                created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 serial_id,
@@ -565,6 +596,7 @@ def add_serial_part(
                 caption,
                 source_chat_id,
                 source_message_id,
+                created_at,
             ),
         )
         conn.commit()
@@ -591,6 +623,34 @@ def del_serial_part(serial_id: int, part: int) -> None:
         conn.commit()
 
 
+def delete_empty_serials() -> list[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT s.id, s.code, s.title
+            FROM serials AS s
+            LEFT JOIN serial_parts AS p ON p.serial_id = s.id
+            WHERE p.serial_id IS NULL
+            ORDER BY s.code ASC
+            """
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+        if rows:
+            conn.execute(
+                """
+                DELETE FROM serials
+                WHERE id IN (
+                    SELECT s.id
+                    FROM serials AS s
+                    LEFT JOIN serial_parts AS p ON p.serial_id = s.id
+                    WHERE p.serial_id IS NULL
+                )
+                """
+            )
+            conn.commit()
+        return rows
+
+
 def serial_part_exists(serial_id: int, part: int) -> bool:
     with _connect() as conn:
         cur = conn.execute(
@@ -600,11 +660,24 @@ def serial_part_exists(serial_id: int, part: int) -> bool:
         return cur.fetchone() is not None
 
 
+def serial_part_source_exists(source_chat_id: int, source_message_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT 1
+            FROM serial_parts
+            WHERE source_chat_id = ? AND source_message_id = ?
+            """,
+            (source_chat_id, source_message_id),
+        )
+        return cur.fetchone() is not None
+
+
 def get_serial_parts(serial_id: int) -> List[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
             """
-            SELECT part, file_id, file_type, caption, source_chat_id, source_message_id
+            SELECT part, file_id, file_type, caption, source_chat_id, source_message_id, created_at
             FROM serial_parts
             WHERE serial_id = ?
             ORDER BY part ASC, id ASC
@@ -618,7 +691,7 @@ def get_serial_part(serial_id: int, part: int) -> Optional[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
             """
-            SELECT part, file_id, file_type, caption, source_chat_id, source_message_id
+            SELECT part, file_id, file_type, caption, source_chat_id, source_message_id, created_at
             FROM serial_parts
             WHERE serial_id = ? AND part = ?
             """,
@@ -809,6 +882,118 @@ def get_serial_recent_days(limit: int = 7) -> List[Tuple[str, int]]:
             (limit,),
         )
         return [(row["day"], row["total"]) for row in cur.fetchall()]
+
+
+def get_serial_total_views_map(codes: List[int]) -> Dict[int, int]:
+    if not codes:
+        return {}
+    placeholders = ",".join(["?"] * len(codes))
+    query = (
+        f"SELECT code, COALESCE(SUM(views), 0) AS total FROM serial_stats "
+        f"WHERE code IN ({placeholders}) GROUP BY code"
+    )
+    with _connect() as conn:
+        cur = conn.execute(query, codes)
+        return {int(row["code"]): int(row["total"]) for row in cur.fetchall()}
+
+
+def get_expired_vip_serial_parts(cutoff: str, limit: int = 200) -> List[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT
+                p.serial_id,
+                p.part,
+                p.source_chat_id,
+                p.source_message_id
+            FROM serial_parts AS p
+            JOIN serials AS s ON s.id = p.serial_id
+            WHERE s.is_vip = 1
+                AND p.created_at IS NOT NULL
+                AND p.created_at <= ?
+            ORDER BY p.created_at ASC
+            LIMIT ?
+            """,
+            (cutoff, limit),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+def get_serial_notification_map(serial_id: int) -> Dict[int, Dict[str, int]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT user_id, muted, notified
+            FROM serial_notifications
+            WHERE serial_id = ?
+            """,
+            (serial_id,),
+        )
+        return {
+            int(row["user_id"]): {
+                "muted": int(row["muted"]),
+                "notified": int(row["notified"]),
+            }
+            for row in cur.fetchall()
+        }
+
+
+def mark_serial_notification_sent(user_id: int, serial_id: int) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO serial_notifications (user_id, serial_id, muted, notified)
+            VALUES (?, ?, 0, 1)
+            ON CONFLICT(user_id, serial_id) DO UPDATE SET notified = 1
+            """,
+            (user_id, serial_id),
+        )
+        conn.commit()
+
+
+def set_serial_notification_muted(user_id: int, serial_id: int, muted: int = 1) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO serial_notifications (user_id, serial_id, muted, notified)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(user_id, serial_id) DO UPDATE SET
+                muted = excluded.muted,
+                notified = 1
+            """,
+            (user_id, serial_id, int(bool(muted))),
+        )
+        conn.commit()
+
+
+def block_user(user_id: int, blocked_at: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO blocked_users (user_id, blocked_at)
+            VALUES (?, ?)
+            """,
+            (user_id, blocked_at),
+        )
+        conn.commit()
+
+
+def unblock_user(user_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM blocked_users WHERE user_id = ?", (user_id,))
+        conn.commit()
+
+
+def is_blocked_user(user_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute("SELECT 1 FROM blocked_users WHERE user_id = ?", (user_id,))
+        return cur.fetchone() is not None
+
+
+def get_blocked_users() -> List[int]:
+    with _connect() as conn:
+        cur = conn.execute("SELECT user_id FROM blocked_users")
+        return [int(row["user_id"]) for row in cur.fetchall()]
 
 
 def add_user(user_id: int, username: Optional[str] = None) -> None:

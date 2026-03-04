@@ -4,10 +4,12 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import urllib.parse
 import zipfile
 from collections import deque
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.enums import ChatMemberStatus
@@ -15,8 +17,23 @@ from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import CallbackQuery, ChatJoinRequest, FSInputFile, Message, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from telethon.errors import FloodWaitError
+from telethon.tl.functions.messages import GetBotCallbackAnswerRequest
+from telethon.tl.functions.messages import GetForumTopicsRequest
+from telethon.utils import get_peer_id
 
-from app.config import DB_PATH, LOG_PATH, OWNER_ID, SOURCE_CHANNEL_ID
+from app.config import (
+    BROADCAST_BATCH_EVERY,
+    BROADCAST_BATCH_SLEEP,
+    CACHE_CLEAN_INTERVAL,
+    CONTACT_REPLY_MAXLEN,
+    DB_PATH,
+    IMPORT_GROUP_ID,
+    LOG_PATH,
+    OWNER_ID,
+    SOURCE_CHANNEL_ID,
+    VIP_REMINDER_INTERVAL,
+)
 from app.db import (
     add_admin,
     add_channel,
@@ -36,6 +53,8 @@ from app.db import (
     get_serial_parts,
     get_serial_session,
     get_serials,
+    serial_part_source_exists,
+    delete_empty_serials,
     search_serials_by_title,
     count_serials_by_title,
     del_serial,
@@ -60,6 +79,14 @@ from app.db import (
     record_serial_view,
     get_serial_day_stats,
     get_serial_recent_days,
+    get_serial_notification_map,
+    mark_serial_notification_sent,
+    set_serial_notification_muted,
+    get_serial_total_views_map,
+    block_user,
+    unblock_user,
+    get_blocked_users,
+    is_blocked_user,
 )
 from app.keyboards import (
     admin_back_keyboard,
@@ -69,6 +96,7 @@ from app.keyboards import (
     log_cancel_keyboard,
     post_link_keyboard,
     post_media_keyboard,
+    post_channel_keyboard,
     serial_cancel_keyboard,
     serial_flow_keyboard,
     serial_parts_keyboard,
@@ -86,6 +114,15 @@ from app.keyboards import (
     users_keyboard,
     user_keyboard,
     broadcast_target_keyboard,
+    users_manage_keyboard,
+)
+from app.userbot import (
+    UserbotError,
+    get_userbot_client,
+    reset_userbot_client,
+    set_userbot_api_hash,
+    set_userbot_api_id,
+    set_userbot_session,
 )
 
 SERIAL_PARTS_PER_PAGE = 20
@@ -112,6 +149,8 @@ VIP_CARD_SESSIONS: set[int] = set()
 VIP_PAYMENT_SESSIONS: set[int] = set()
 VIP_REJECT_SESSIONS: dict[int, int] = {}
 CONTACT_ADMIN_SESSIONS: set[int] = set()
+CONTACT_REPLY_MAP: dict[tuple[int, int], int] = {}
+CONTACT_REPLY_ORDER: deque[tuple[int, int]] = deque(maxlen=CONTACT_REPLY_MAXLEN)
 BROADCAST_SESSIONS: dict[int, dict[str, object]] = {}
 BROADCAST_TEXT_SESSIONS: set[int] = set()
 VIP_RECEIPT_APPROVED: dict[int, int] = {}
@@ -122,6 +161,8 @@ SERIAL_UPLOAD_QUEUES: dict[int, asyncio.PriorityQueue] = {}
 SERIAL_UPLOAD_TASKS: dict[int, asyncio.Task] = {}
 SERIAL_UPLOAD_COUNTERS: dict[int, int] = {}
 SERIAL_UPLOAD_NEXT_PART: dict[tuple[int, int], int] = {}
+IMPORT_TASKS: dict[int, asyncio.Task] = {}
+IMPORT_SESSIONS: dict[int, dict[str, object]] = {}
 ADMIN_PERMISSION_LABELS = {
     "can_manage_admins": "Adminlarni boshqarish",
     "can_manage_channels": "Kanallarni boshqarish",
@@ -220,6 +261,45 @@ def _vip_receipt_keyboard(user_id: int):
     return kb.as_markup()
 
 
+def _serial_notify_optout_keyboard(serial_id: int):
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text="Bu drama uchun bildirishnomani o'chirish",
+        callback_data=f"serialnotify:off:{serial_id}",
+    )
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def _next_missing_part(serial_id: int) -> int:
+    parts = get_serial_parts(serial_id)
+    existing = {int(row["part"]) for row in parts if row.get("part") is not None}
+    part = 1
+    while part in existing:
+        part += 1
+    return part
+
+
+def _remember_contact_reply(admin_id: int, message_id: int, user_id: int) -> None:
+    key = (admin_id, message_id)
+    CONTACT_REPLY_MAP[key] = user_id
+    CONTACT_REPLY_ORDER.append(key)
+    while len(CONTACT_REPLY_MAP) > CONTACT_REPLY_ORDER.maxlen:
+        old = CONTACT_REPLY_ORDER.popleft()
+        CONTACT_REPLY_MAP.pop(old, None)
+
+
+def _schedule_delete_message(bot, chat_id: int, message_id: int, delay_seconds: int = 86400) -> None:
+    async def _delete_later() -> None:
+        await asyncio.sleep(delay_seconds)
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        except Exception:
+            pass
+
+    asyncio.create_task(_delete_later())
+
+
 async def _update_receipt_status(bot, user_id: int, text: str) -> None:
     entries = VIP_RECEIPT_MESSAGES.pop(user_id, [])
     for admin_id, message_id in entries:
@@ -283,6 +363,629 @@ def _normalize_search_text(text: str) -> str:
     return value
 
 
+def _strip_links(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = re.sub(r"\b\w+\.\w+\b", "", text, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"(https?://\S+|www\.\S+|t\.me/\S+|tg://\S+|@\w+)",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned
+
+
+async def _bot_in_chat(bot, chat_id: int) -> bool:
+    try:
+        me = await bot.get_me()
+        member = await bot.get_chat_member(chat_id, me.id)
+    except Exception:
+        return False
+    return member.status not in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}
+
+
+async def _fetch_forum_topics(client, entity) -> list:
+    topics: list = []
+    offset_date = None
+    offset_id = 0
+    offset_topic = 0
+    while True:
+        result = await client(
+            GetForumTopicsRequest(
+                peer=entity,
+                offset_date=offset_date,
+                offset_id=offset_id,
+                offset_topic=offset_topic,
+                limit=100,
+                q="",
+            )
+        )
+        if not result.topics:
+            break
+        topics.extend(result.topics)
+        last = result.topics[-1]
+        offset_id = last.id
+        offset_date = last.date
+        offset_topic = last.id
+    return topics
+
+
+def _shorten_label(value: str, limit: int = 32) -> str:
+    text = value.strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[: max(0, limit - 3)]}..."
+
+
+def _chunk_lines(lines: list[str], limit: int = 3900) -> list[str]:
+    chunks: list[str] = []
+    current: list[str] = []
+    size = 0
+    for line in lines:
+        add_len = len(line) + (1 if current else 0)
+        if current and size + add_len > limit:
+            chunks.append("\n".join(current))
+            current = []
+            size = 0
+        current.append(line)
+        size += add_len
+    if current:
+        chunks.append("\n".join(current))
+    return chunks
+
+
+def _import_selected_topics(session: dict[str, object]) -> list[dict[str, object]]:
+    topics = session.get("topics") or []
+    excluded = session.get("excluded") or set()
+    return [item for idx, item in enumerate(topics, start=1) if idx not in excluded]
+
+
+def _import_selected_parts(session: dict[str, object]) -> int:
+    selected = _import_selected_topics(session)
+    total = 0
+    for item in selected:
+        msg_ids = item.get("msg_ids")
+        if isinstance(msg_ids, list):
+            total += len(msg_ids)
+    return total
+
+
+def _import_total_parts(session: dict[str, object]) -> int:
+    topics = session.get("topics") or []
+    total = 0
+    for item in topics:
+        msg_ids = item.get("msg_ids")
+        if isinstance(msg_ids, list):
+            total += len(msg_ids)
+    return total
+
+
+def _import_has_counts(session: dict[str, object]) -> bool:
+    topics = session.get("topics") or []
+    for item in topics:
+        if isinstance(item.get("msg_ids"), list):
+            return True
+    return False
+
+
+def _render_import_selection_text(session: dict[str, object], page: int, per_page: int) -> str:
+    topics = session.get("topics") or []
+    total = len(topics)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(0, min(page, total_pages - 1))
+    start = page * per_page
+    end = start + per_page
+    excluded = session.get("excluded") or set()
+    selected = total - len(excluded)
+    has_counts = _import_has_counts(session)
+    selected_parts = _import_selected_parts(session)
+    lines = [
+        "Import tanlash:",
+        f"Tanlangan mavzular: {selected}/{total} | Qismlar: {selected_parts if has_counts else '?'}",
+        f"Sahifa: {page + 1}/{total_pages}",
+        "",
+    ]
+    for idx, item in enumerate(topics[start:end], start=start + 1):
+        title = _shorten_label(item["title"], 40)
+        msg_ids = item.get("msg_ids")
+        count = len(msg_ids) if isinstance(msg_ids, list) else None
+        mark = "✅" if idx not in excluded else "❌"
+        count_text = f"{count} qism" if count is not None else "? qism"
+        lines.append(f"{mark} {idx}) {title} ({count_text})")
+    return "\n".join(lines)
+
+
+def _import_selection_keyboard(session: dict[str, object], page: int, per_page: int):
+    topics = session.get("topics") or []
+    total = len(topics)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(0, min(page, total_pages - 1))
+    start = page * per_page
+    end = start + per_page
+    excluded = session.get("excluded") or set()
+    kb = InlineKeyboardBuilder()
+    for idx, item in enumerate(topics[start:end], start=start + 1):
+        title = _shorten_label(item["title"], 24)
+        mark = "✅" if idx not in excluded else "❌"
+        kb.button(
+            text=f"{mark} {idx}. {title}",
+            callback_data=f"import:toggle:{idx}",
+        )
+    if total_pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(("⬅️", f"import:page:{page - 1}"))
+        nav.append((f"{page + 1}/{total_pages}", "import:noop"))
+        if page + 1 < total_pages:
+            nav.append(("➡️", f"import:page:{page + 1}"))
+        for text, data in nav:
+            kb.button(text=text, callback_data=data)
+    kb.button(text="Hammasini tanlash", callback_data="import:selectall")
+    kb.button(text="Hammasini bekor qilish", callback_data="import:selectnone")
+    kb.button(text="Tasdiqlash", callback_data="import:confirm")
+    kb.button(text="Bekor qilish", callback_data="import:cancel")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def _import_confirm_keyboard():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ Ha", callback_data="import:apply")
+    kb.button(text="⬅️ Ortga", callback_data="import:back")
+    kb.button(text="❌ Bekor qilish", callback_data="import:cancel")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def _progress_bar(percent: int, width: int = 10) -> str:
+    percent = max(0, min(100, percent))
+    filled = int(round((percent / 100) * width))
+    return f"{'█' * filled}{'░' * (width - filled)}"
+
+
+def _progress_spinner(step: int) -> str:
+    frames = ["⏳", "🔄", "⌛", "🔁"]
+    return frames[step % len(frames)]
+
+
+def _coerce_message_id(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if hasattr(value, "id"):
+        try:
+            return int(getattr(value, "id"))
+        except Exception:
+            return None
+    return None
+
+
+async def _click_bot_cancel_button(client, bot_entity) -> bool:
+    try:
+        messages = await client.get_messages(bot_entity, limit=5)
+    except Exception:
+        return False
+    for msg in messages:
+        if not msg or not getattr(msg, "message", ""):
+            continue
+        if "Davom ettirasizmi" not in msg.message:
+            continue
+        buttons = getattr(msg, "buttons", None)
+        if not buttons:
+            continue
+        for row in buttons:
+            for button in row:
+                if not button or not getattr(button, "text", ""):
+                    continue
+                if "Bekor" not in button.text:
+                    continue
+                data = getattr(button, "data", None)
+                if not data:
+                    continue
+                await client(
+                    GetBotCallbackAnswerRequest(
+                        peer=bot_entity,
+                        msg_id=msg.id,
+                        data=data,
+                    )
+                )
+                return True
+    return False
+
+
+def _format_eta(seconds: float) -> str:
+    if seconds < 0:
+        return "?"
+    total = int(seconds)
+    mins, sec = divmod(total, 60)
+    hours, mins = divmod(mins, 60)
+    if hours:
+        return f"{hours}so {mins}daqiqa"
+    if mins:
+        return f"{mins}daqiqa {sec}s"
+    return f"{sec}s"
+
+
+async def _copy_source_to_channel(
+    message: Message,
+    client,
+    source_chat_id: int,
+    source_message_id: int,
+    bot_in_group: bool,
+    source_msg=None,
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    async def _bot_copy(chat_id: int, from_chat_id: int, msg_id: int) -> Message:
+        while True:
+            try:
+                return await message.bot.copy_message(chat_id, from_chat_id, msg_id)
+            except TelegramRetryAfter as err:
+                await _wait_retry(err)
+    if bot_in_group:
+        copied = await _bot_copy(SOURCE_CHANNEL_ID, source_chat_id, source_message_id)
+        return _extract_media(copied)
+    while True:
+        try:
+            if source_msg is None:
+                source_msg = await client.get_messages(source_chat_id, ids=source_message_id)
+                if isinstance(source_msg, list):
+                    source_msg = source_msg[0] if source_msg else None
+            try:
+                media = getattr(source_msg, "media", None) if source_msg else None
+                caption = _strip_links(getattr(source_msg, "message", "") or "")
+            except Exception:
+                return None, None, None
+            if not media:
+                return None, None, None
+            forwarded_msg = await client.send_file(
+                SOURCE_CHANNEL_ID,
+                media,
+                caption=caption,
+                supports_streaming=True,
+            )
+            break
+        except FloodWaitError as err:
+            await asyncio.sleep(err.seconds + 1)
+    copied = await _bot_copy(SOURCE_CHANNEL_ID, SOURCE_CHANNEL_ID, forwarded_msg.id)
+    return _extract_media(copied)
+
+
+async def _run_forum_import(message: Message, group_ref: str) -> None:
+    user_id = message.from_user.id
+    reply_chat_id = message.chat.id
+    try:
+        if not SOURCE_CHANNEL_ID:
+            await message.bot.send_message(reply_chat_id, "SOURCE_CHANNEL_ID sozlanmagan.")
+            return
+        try:
+            client = await get_userbot_client()
+        except UserbotError as err:
+            await message.bot.send_message(reply_chat_id, str(err))
+            return
+        try:
+            entity = await client.get_entity(group_ref)
+        except Exception:
+            await message.bot.send_message(reply_chat_id, "Guruh topilmadi yoki userbotda yo'q.")
+            return
+        if not getattr(entity, "forum", False):
+            await message.bot.send_message(reply_chat_id, "Bu guruh mavzuli emas.")
+            return
+        chat_id = get_peer_id(entity)
+        if IMPORT_GROUP_ID and chat_id != IMPORT_GROUP_ID:
+            await message.bot.send_message(reply_chat_id, "Ushbu guruh import uchun ruxsat etilmagan.")
+            return
+        bot_in_group = await _bot_in_chat(message.bot, chat_id)
+        status = await message.bot.send_message(reply_chat_id, "Import skan boshlandi...")
+        topics = await _fetch_forum_topics(client, entity)
+        if not topics:
+            await status.edit_text("Mavzular topilmadi.")
+            return
+        total_topics = len(topics)
+        preview: list[dict[str, object]] = []
+        processed_topics = 0
+        last_edit = 0.0
+        for topic in topics:
+            title = (getattr(topic, "title", "") or "").strip()
+            if not title:
+                processed_topics += 1
+                continue
+            percent = int((processed_topics / total_topics) * 100)
+            now = time.monotonic()
+            if now - last_edit > 1.5:
+                try:
+                    await status.edit_text(
+                        f"Import ro'yxat: {percent}% ({processed_topics}/{total_topics})"
+                    )
+                except Exception:
+                    pass
+                last_edit = now
+            preview.append(
+                {
+                    "topic_id": topic.id,
+                    "title": title,
+                }
+            )
+            processed_topics += 1
+            if processed_topics % 5 == 0 or processed_topics == total_topics:
+                percent = int((processed_topics / total_topics) * 100)
+                try:
+                    await status.edit_text(
+                        f"Import ro'yxat: {percent}% ({processed_topics}/{total_topics})"
+                    )
+                except Exception:
+                    pass
+        if not preview:
+            await status.edit_text("Mavzular topilmadi.")
+            return
+        total_parts = 0
+        IMPORT_SESSIONS[user_id] = {
+            "state": "select",
+            "group_ref": group_ref,
+            "chat_id": chat_id,
+            "topics": preview,
+            "total_parts": total_parts,
+            "excluded": set(),
+            "page": 0,
+            "reply_chat_id": reply_chat_id,
+            "status_message_id": status.message_id,
+        }
+        await status.edit_text(
+            _render_import_selection_text(IMPORT_SESSIONS[user_id], 0, 8),
+            reply_markup=_import_selection_keyboard(IMPORT_SESSIONS[user_id], 0, 8),
+        )
+        _log_event(
+            "forum_import_preview",
+            user_id,
+            f"topics={len(preview)} parts={total_parts}",
+        )
+    finally:
+        IMPORT_TASKS.pop(user_id, None)
+
+
+async def _apply_forum_import(message: Message, session: dict[str, object]) -> None:
+    user_id = message.from_user.id
+    try:
+        group_ref = session.get("group_ref")
+        chat_id = int(session.get("chat_id") or 0)
+        topics = session.get("selected_topics") or []
+        total_parts = int(session.get("selected_parts") or 0)
+        status_id = session.get("status_message_id")
+        reply_chat_id = int(session.get("reply_chat_id") or message.chat.id)
+        if not group_ref or not chat_id or not topics:
+            await message.bot.send_message(reply_chat_id, "Import sessiya noto'g'ri.")
+            return
+        client = await get_userbot_client()
+        entity = await client.get_entity(group_ref)
+        bot_me = await message.bot.get_me()
+        if not bot_me.username:
+            await message.bot.send_message(reply_chat_id, "Bot username topilmadi.")
+            return
+        bot_entity = await client.get_entity(bot_me.username)
+        bot_in_group = await _bot_in_chat(message.bot, chat_id)
+        status = None
+        if status_id:
+            try:
+                status = await message.bot.edit_message_text(
+                    "Import boshlandi...",
+                    reply_chat_id,
+                    status_id,
+                )
+            except Exception:
+                status = None
+        if not status:
+            status = await message.bot.send_message(reply_chat_id, "Import boshlandi...")
+        added_topics: list[str] = []
+        processed = 0
+        total_topics = len(topics)
+        processed_topics = 0
+        last_edit = time.monotonic()
+        spinner_step = 0
+        started_at = time.monotonic()
+        await message.bot.send_message(
+            reply_chat_id,
+            "Import bot orqali qo'shish rejimida ketadi. Userbot admin bo'lishi kerak.",
+        )
+
+        scan_topics: list[dict[str, object]] = []
+        scan_idx = 0
+        for topic in topics:
+            title = topic["title"]
+            msg_ids: list[int] = []
+            try:
+                async for msg in client.iter_messages(entity, reply_to=topic["topic_id"], reverse=True):
+                    if not (msg.video or msg.document):
+                        continue
+                    if getattr(msg, "gif", False):
+                        continue
+                    if msg.document and getattr(msg.document, "mime_type", "") == "image/gif":
+                        continue
+                    if serial_part_source_exists(chat_id, msg.id):
+                        continue
+                    msg_id = _coerce_message_id(msg)
+                    if msg_id is None:
+                        continue
+                    msg_ids.append(msg_id)
+            except Exception as exc:
+                _log_event(
+                    "forum_import_scan_error",
+                    user_id,
+                    f"topic_id={topic['topic_id']} error={exc}",
+                )
+            if msg_ids:
+                scan_topics.append(
+                    {
+                        "topic_id": topic["topic_id"],
+                        "title": title,
+                        "msg_ids": msg_ids,
+                    }
+                )
+            scan_idx += 1
+            now = time.monotonic()
+            if now - last_edit > 1.5:
+                spinner = _progress_spinner(spinner_step)
+                spinner_step += 1
+                try:
+                    await status.edit_text(
+                        f"{spinner} Skan ketmoqda:\n"
+                        f"Mavzular: {scan_idx}/{total_topics}"
+                    )
+                except Exception:
+                    pass
+                last_edit = now
+
+        if not scan_topics:
+            await status.edit_text("Import tugadi. Yangi qismlar qo'shilmadi.")
+            return
+
+        topics = scan_topics
+        total_parts = sum(len(item["msg_ids"]) for item in topics)
+        processed_topics = 0
+        last_edit = time.monotonic()
+        spinner_step = 0
+        started_at = time.monotonic()
+        for topic in topics:
+            title = topic["title"]
+            msg_ids = topic["msg_ids"]
+            added = 0
+            try:
+                await client.send_message(bot_entity, "/addserial")
+                await asyncio.sleep(0.4)
+                await client.send_message(bot_entity, title)
+                await asyncio.sleep(0.4)
+            except Exception as exc:
+                _log_event(
+                    "forum_import_botflow_error",
+                    user_id,
+                    f"stage=addserial title={title} error={exc}",
+                )
+                processed_topics += 1
+                continue
+            for msg_id in msg_ids:
+                msg_id = _coerce_message_id(msg_id)
+                if msg_id is None:
+                    processed += 1
+                    continue
+                try:
+                    msg = await client.get_messages(entity, ids=msg_id)
+                    if isinstance(msg, list):
+                        msg = msg[0] if msg else None
+                    if not msg:
+                        processed += 1
+                        continue
+                    try:
+                        has_media = bool(getattr(msg, "video", None) or getattr(msg, "document", None))
+                        is_gif = bool(getattr(msg, "gif", False))
+                        is_doc_gif = bool(
+                            getattr(getattr(msg, "document", None), "mime_type", "") == "image/gif"
+                        )
+                    except Exception:
+                        processed += 1
+                        continue
+                    if not has_media or is_gif or is_doc_gif:
+                        processed += 1
+                        continue
+                    caption = _strip_links(getattr(msg, "message", "") or "")
+                    await client.send_file(
+                        bot_entity,
+                        msg.media,
+                        caption=caption or None,
+                        supports_streaming=True,
+                    )
+                    await asyncio.sleep(0.3)
+                except Exception as exc:
+                    _log_event(
+                        "forum_import_apply_error",
+                        user_id,
+                        f"chat_id={chat_id} msg_id={msg_id} error={exc}",
+                    )
+                    processed += 1
+                    continue
+                added += 1
+                processed += 1
+                if processed % 20 == 0 or processed == total_parts:
+                    now = time.monotonic()
+                    if now - last_edit > 2.0:
+                        parts_percent = int((processed / total_parts) * 100)
+                        topics_percent = int((processed_topics / total_topics) * 100) if total_topics else 100
+                        elapsed = time.monotonic() - started_at
+                        rate = processed / elapsed if elapsed > 0 else 0
+                        remaining = (total_parts - processed) / rate if rate > 0 else -1
+                        spinner = _progress_spinner(spinner_step)
+                        spinner_step += 1
+                        try:
+                            await status.edit_text(
+                                f"{spinner} Import ketmoqda:\n"
+                                f"Mavzular: {topics_percent}% {_progress_bar(topics_percent)} "
+                                f"({processed_topics}/{total_topics})\n"
+                                f"Qismlar: {parts_percent}% {_progress_bar(parts_percent)} "
+                                f"({processed}/{total_parts})\n"
+                                f"Qolgan vaqt: {_format_eta(remaining)}"
+                            )
+                        except Exception:
+                            pass
+                        last_edit = now
+            if added:
+                added_topics.append(title)
+            processed_topics += 1
+            cancelled = False
+            for _ in range(10):
+                try:
+                    if await _click_bot_cancel_button(client, bot_entity):
+                        cancelled = True
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(0.5)
+            if not cancelled:
+                try:
+                    await client.send_message(bot_entity, "/serialcancel")
+                except Exception:
+                    pass
+            now = time.monotonic()
+            if now - last_edit > 2.0:
+                parts_percent = int((processed / total_parts) * 100)
+                topics_percent = int((processed_topics / total_topics) * 100) if total_topics else 100
+                elapsed = time.monotonic() - started_at
+                rate = processed / elapsed if elapsed > 0 else 0
+                remaining = (total_parts - processed) / rate if rate > 0 else -1
+                spinner = _progress_spinner(spinner_step)
+                spinner_step += 1
+                try:
+                    await status.edit_text(
+                        f"{spinner} Import ketmoqda:\n"
+                        f"Mavzular: {topics_percent}% {_progress_bar(topics_percent)} "
+                        f"({processed_topics}/{total_topics})\n"
+                        f"Qismlar: {parts_percent}% {_progress_bar(parts_percent)} "
+                        f"({processed}/{total_parts})\n"
+                        f"Qolgan vaqt: {_format_eta(remaining)}"
+                    )
+                except Exception:
+                    pass
+                last_edit = now
+        if not added_topics:
+            await status.edit_text("Import tugadi. Yangi qismlar qo'shilmadi.")
+            return
+        lines = ["Import tugadi. Qo'shilgan dramalar:"]
+        lines.extend(f"- {title}" for title in added_topics)
+        for chunk in _chunk_lines(lines):
+            await message.bot.send_message(reply_chat_id, chunk)
+        _log_event(
+            "forum_import_done",
+            user_id,
+            f"topics={len(added_topics)} parts={processed}",
+        )
+        try:
+            await asyncio.sleep(5)
+            await client.send_message(bot_entity, "/importstop")
+        except Exception:
+            pass
+    finally:
+        IMPORT_SESSIONS.pop(user_id, None)
+        IMPORT_TASKS.pop(user_id, None)
+
+
 async def _ensure_vip_access(message: Message, serial: dict, user_id: Optional[int] = None) -> bool:
     if user_id is None:
         user_id = message.from_user.id
@@ -338,6 +1041,9 @@ router = Router()
 LOG_TAIL_LINES = 40
 LOG_MAX_BYTES = 10 * 1024 * 1024
 LOG_BACKUP_COUNT = 3
+BACKUP_DIR = "data/backups"
+BACKUP_KEEP = 7
+BACKUP_TZ = "Asia/Tashkent"
 
 
 async def _check_subscriptions(bot, user_id: int, channels: list) -> bool:
@@ -722,6 +1428,8 @@ def _extract_media(message: Message) -> tuple[Optional[str], Optional[str], Opti
     if message.video:
         return message.video.file_id, "video", message.caption
     if message.document:
+        if message.document.mime_type == "image/gif":
+            return None, None, None
         return message.document.file_id, "document", message.caption
     return None, None, None
 
@@ -805,6 +1513,37 @@ def _build_backup_zip() -> Optional[str]:
     return backup_path
 
 
+def _build_scheduled_backup() -> Optional[str]:
+    timestamp = dt.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    backup_path = os.path.join(BACKUP_DIR, f"serialbot-backup-{timestamp}.zip")
+    files = []
+    if os.path.exists(DB_PATH):
+        files.append(DB_PATH)
+    if os.path.exists(LOG_PATH):
+        files.append(LOG_PATH)
+    if not files:
+        return None
+    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for file_path in files:
+            archive.write(file_path, arcname=os.path.basename(file_path))
+    try:
+        backups = [
+            os.path.join(BACKUP_DIR, name)
+            for name in os.listdir(BACKUP_DIR)
+            if name.endswith(".zip")
+        ]
+        backups.sort(key=lambda path: os.path.getmtime(path), reverse=True)
+        for old_path in backups[BACKUP_KEEP:]:
+            try:
+                os.remove(old_path)
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return backup_path
+
+
 async def _safe_copy_message(
     bot,
     chat_id: int,
@@ -847,17 +1586,16 @@ async def _safe_send_video(
     caption: Optional[str],
     reply_markup=None,
     reply_to_message_id: Optional[int] = None,
-) -> bool:
+) -> Optional[Message]:
     while True:
         try:
-            await message.answer_video(
+            return await message.answer_video(
                 file_id,
                 caption=caption,
                 protect_content=True,
                 reply_markup=reply_markup,
                 reply_to_message_id=reply_to_message_id,
             )
-            return True
         except TelegramRetryAfter as err:
             await _wait_retry(err)
         except TelegramAPIError:
@@ -866,7 +1604,7 @@ async def _safe_send_video(
                 message.from_user.id if message.from_user else None,
                 f"file_id={file_id}",
             )
-            return False
+            return None
 
 
 async def _safe_send_document(
@@ -875,17 +1613,16 @@ async def _safe_send_document(
     caption: Optional[str],
     reply_markup=None,
     reply_to_message_id: Optional[int] = None,
-) -> bool:
+) -> Optional[Message]:
     while True:
         try:
-            await message.answer_document(
+            return await message.answer_document(
                 file_id,
                 caption=caption,
                 protect_content=True,
                 reply_markup=reply_markup,
                 reply_to_message_id=reply_to_message_id,
             )
-            return True
         except TelegramRetryAfter as err:
             await _wait_retry(err)
         except TelegramAPIError:
@@ -894,7 +1631,7 @@ async def _safe_send_document(
                 message.from_user.id if message.from_user else None,
                 f"file_id={file_id}",
             )
-            return False
+            return None
 
 
 async def _safe_send_to_channel(
@@ -955,6 +1692,8 @@ async def help_handler(message: Message):
         if _has_perm(message.from_user.id, "can_view_lists"):
             lines.append("/channels - kanallar ro'yxati")
         lines.append("/serial <nom|kod> - dramani yuborish")
+        if _has_perm(message.from_user.id, "can_add_serial") and _has_perm(message.from_user.id, "can_add_part"):
+            lines.append("/import <guruh_linki> - mavzuli guruhdan drama import")
         if _has_perm(message.from_user.id, "can_manage_vip"):
             lines.extend(
                 [
@@ -970,7 +1709,19 @@ async def help_handler(message: Message):
         if _has_perm(message.from_user.id, "can_broadcast"):
             lines.append("/broadcast <text> - barchaga xabar (admin)")
             lines.append("/broadcast - reply bilan rasm/video yuborish")
+            lines.append("/usend <@username|user_id> [text] - userbot orqali yuborish")
+            lines.append("/post - kanalga post yaratish")
         lines.append("/vip - VIP holatini ko'rish")
+        if message.from_user.id == OWNER_ID:
+            lines.extend(
+                [
+                    "/setuserbotapiid <raqam> - userbot app id",
+                    "/setuserbotapihash <hash> - userbot app hash",
+                    "/setuserbotsession <session_string> - userbot session",
+                    "/clearuserbotapi - userbot app id/hash tozalash",
+                    "/clearuserbotsession - userbot session tozalash",
+                ]
+            )
         text = "\n".join(lines)
     else:
         text = (
@@ -1080,6 +1831,22 @@ async def del_serial_handler(message: Message, command: CommandObject):
         return
     del_serial(int(code))
     await message.answer("Drama o'chirildi.")
+
+
+@router.message(Command("cleanup"))
+async def cleanup_empty_serials_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_add_serial"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    removed = delete_empty_serials()
+    if not removed:
+        await message.answer("Bo'sh dramalar topilmadi.")
+        return
+    lines = ["Bo'sh dramalar o'chirildi:"]
+    lines.extend(f"- {item['code']} {item['title']}" for item in removed)
+    for chunk in _chunk_lines(lines):
+        await message.answer(chunk)
+    _log_event("serials_cleanup", message.from_user.id, f"removed={len(removed)}")
 
 
 @router.message(Command("delpart"))
@@ -1219,7 +1986,22 @@ async def serial_cancel_callback(callback: CallbackQuery):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     clear_serial_session(callback.from_user.id)
-    await callback.message.edit_text(
+    try:
+        await callback.message.edit_text(
+            "Drama qo'shish bekor qilindi.",
+            reply_markup=admin_panel_keyboard(),
+        )
+    except TelegramBadRequest:
+        await callback.answer()
+
+
+@router.message(Command("serialcancel"))
+async def serial_cancel_command_handler(message: Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Ruxsat yo'q.")
+        return
+    clear_serial_session(message.from_user.id)
+    await message.answer(
         "Drama qo'shish bekor qilindi.",
         reply_markup=admin_panel_keyboard(),
     )
@@ -1317,6 +2099,37 @@ async def admin_users_callback(callback: CallbackQuery):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     await _render_users_page(callback, page=0)
+
+
+@router.callback_query(F.data.startswith("admin:user:"))
+async def admin_user_block_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_manage_admins"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) != 5:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    action = parts[2]
+    try:
+        user_id = int(parts[3])
+        page = int(parts[4])
+    except ValueError:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    if user_id == OWNER_ID:
+        await callback.answer("Owner bloklanmaydi.", show_alert=True)
+        return
+    if action == "block":
+        block_user(user_id, _now())
+        await callback.answer("Foydalanuvchi bloklandi.")
+    elif action == "unblock":
+        unblock_user(user_id)
+        await callback.answer("Foydalanuvchi blokdan chiqarildi.")
+    else:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    await _render_users_page(callback, page=page)
 
 
 @router.callback_query(F.data == "admin:serials")
@@ -1496,6 +2309,7 @@ async def _render_users_page(callback: CallbackQuery, page: int) -> None:
     if not users:
         await callback.message.edit_text("Foydalanuvchilar yo'q.", reply_markup=admin_back_keyboard())
         return
+    blocked_ids = set(get_blocked_users())
     total = len(users)
     total_pages = max(1, (total + USERS_PER_PAGE - 1) // USERS_PER_PAGE)
     page = max(0, min(page, total_pages - 1))
@@ -1503,14 +2317,18 @@ async def _render_users_page(callback: CallbackQuery, page: int) -> None:
     end = start + USERS_PER_PAGE
     page_users = users[start:end]
     header = f"Foydalanuvchilar: {total} ta"
-    body = "\n".join(
-        f"@{user.get('username')}" if user.get("username") else str(user.get("user_id"))
-        for user in page_users
-    )
+    lines = []
+    for user in page_users:
+        user_id = int(user.get("user_id") or 0)
+        label = f"@{user.get('username')}" if user.get("username") else str(user_id)
+        if user_id in blocked_ids:
+            label = f"{label} (bloklangan)"
+        lines.append(label)
+    body = "\n".join(lines)
     text = f"{header}\n{body}"
     await callback.message.edit_text(
         text,
-        reply_markup=users_keyboard(page, total_pages),
+        reply_markup=users_manage_keyboard(page_users, blocked_ids, page, total_pages),
     )
 
 
@@ -1528,11 +2346,18 @@ async def _render_serials_page(callback: CallbackQuery, page: int) -> None:
     start = page * SERIALS_PER_PAGE
     end = start + SERIALS_PER_PAGE
     page_serials = serials[start:end]
+    codes = [int(item["code"]) for item in page_serials if item.get("code") is not None]
+    views_map = get_serial_total_views_map(codes)
     header = f"Dramalar: {total} ta"
-    body = "\n".join(
-        f"{item.get('code')} - {'VIP ' if item.get('is_vip') else ''}{item.get('title')}"
-        for item in page_serials
-    )
+    lines = []
+    for item in page_serials:
+        code = item.get("code")
+        code_int = int(code) if code is not None else 0
+        views = views_map.get(code_int, 0)
+        lines.append(
+            f"{code} - {'VIP ' if item.get('is_vip') else ''}{item.get('title')} | ko'rishlar: {views}"
+        )
+    body = "\n".join(lines)
     text = f"{header}\n{body}"
     await callback.message.edit_text(
         text,
@@ -1707,6 +2532,7 @@ async def admin_help_callback(callback: CallbackQuery):
         "/delchannel <@username|chat_id>\n"
         "/addserial (inline)\n"
         "/addpart <drama_nomi|kod>\n"
+        "/import <guruh_linki>\n"
         "/part <qism_raqami>\n"
         "/delserial <drama_kod>\n"
         "/delpart <drama_kod> <qism>\n"
@@ -1722,7 +2548,7 @@ async def admin_help_callback(callback: CallbackQuery):
         "/backup\n"
         "/restoredb\n"
         "/cancelrestore\n"
-        "/post <drama_kod>\n"
+        "/post - kanalga post yaratish\n"
     )
     await callback.message.edit_text(text, reply_markup=admin_back_keyboard())
 
@@ -2107,6 +2933,23 @@ async def admin_addserial_callback(callback: CallbackQuery):
     )
 
 
+@router.message(Command("addserial"))
+async def add_serial_command_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_add_serial"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    save_serial_session(
+        message.from_user.id,
+        state="await_title",
+        created_at=_now(),
+    )
+    _log_event("serial_add_start", message.from_user.id)
+    await message.answer(
+        "Drama nomini yuboring.",
+        reply_markup=serial_cancel_keyboard(),
+    )
+
+
 @router.callback_query(F.data == "admin:addpart")
 async def admin_addpart_callback(callback: CallbackQuery):
     if not _has_perm(callback.from_user.id, "can_add_part"):
@@ -2184,60 +3027,82 @@ async def restore_db_handler(message: Message):
 
 @router.message(Command("post"))
 async def post_handler(message: Message, command: CommandObject):
-    if not _has_perm(message.from_user.id, "can_view_lists"):
+    if not _has_perm(message.from_user.id, "can_broadcast"):
         await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
-    if not command.args:
-        await message.answer("Foydalanish: /post <drama_kod>")
+    channels = get_channels()
+    if not channels:
+        await message.answer("Ulangan kanallar yo'q. Avval /addchannel bilan qo'shing.")
         return
-    code = _parse_code(command.args)
-    if not code:
-        await message.answer("Kod faqat raqam bo'lishi kerak.")
-        return
-    serial = get_serial_by_code(int(code))
-    if not serial:
-        await message.answer("Drama topilmadi.")
-        return
-    parts_count = len(get_serial_parts(serial["id"]))
-    POST_SESSIONS[message.from_user.id] = {
-        "serial_id": serial["id"],
-        "title": serial["title"],
-        "code": serial["code"],
-        "parts_count": parts_count,
+    session = {
+        "state": "await_channel",
     }
+    if command.args:
+        code = _parse_code(command.args)
+        if not code:
+            await message.answer("Kod faqat raqam bo'lishi kerak.")
+            return
+        serial = get_serial_by_code(int(code))
+        if not serial:
+            await message.answer("Drama topilmadi.")
+            return
+        parts_count = len(get_serial_parts(serial["id"]))
+        session.update(
+            {
+                "serial_id": serial["id"],
+                "title": serial["title"],
+                "code": serial["code"],
+                "parts_count": parts_count,
+            }
+        )
+    POST_SESSIONS[message.from_user.id] = session
     await message.answer(
-        "Rasm yuboring yoki \"Rasmsiz\" tugmasini bosing.",
-        reply_markup=post_media_keyboard(),
+        "Qaysi kanalga post yuborilsin?",
+        reply_markup=post_channel_keyboard(channels),
     )
-    _log_event("post_start", message.from_user.id, f"serial_id={serial['id']}")
+    _log_event("post_start", message.from_user.id)
 
 
 @router.callback_query(F.data.startswith("post:"))
 async def post_callback(callback: CallbackQuery):
-    if not _has_perm(callback.from_user.id, "can_view_lists"):
+    if not _has_perm(callback.from_user.id, "can_broadcast"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     session = POST_SESSIONS.get(callback.from_user.id)
     if not session:
         await callback.answer("Sessiya topilmadi.", show_alert=True)
         return
-    action = callback.data.split(":")[-1]
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    action = parts[1]
     if action == "cancel":
         POST_SESSIONS.pop(callback.from_user.id, None)
         await callback.message.edit_text("Post yaratish bekor qilindi.")
         _log_event("post_cancel", callback.from_user.id)
         return
-    if action != "skip":
-        await callback.answer("Xatolik.", show_alert=True)
+    if action == "channel":
+        if len(parts) != 3:
+            await callback.answer("Xatolik.", show_alert=True)
+            return
+        try:
+            channel_id = int(parts[2])
+        except ValueError:
+            await callback.answer("Xatolik.", show_alert=True)
+            return
+        session["channel_id"] = channel_id
+        if session.get("serial_id"):
+            session["state"] = "await_media"
+            await callback.message.edit_text(
+                "Rasm va caption yuboring.",
+                reply_markup=post_media_keyboard(),
+            )
+        else:
+            session["state"] = "await_code"
+            await callback.message.edit_text("Drama kodini yuboring.")
         return
-    link = await _get_start_link(callback.bot, int(session["code"]))
-    if not link:
-        await callback.message.edit_text("Bot linkini olishda xatolik.")
-        return
-    text = _build_serial_post_text(session["title"], session["parts_count"], link)
-    POST_SESSIONS.pop(callback.from_user.id, None)
-    await callback.message.edit_text(text, reply_markup=post_link_keyboard(link))
-    _log_event("post_created", callback.from_user.id, f"serial_id={session['serial_id']}")
+    await callback.answer("Xatolik.", show_alert=True)
 
 
 @router.message(Command("cancelrestore"))
@@ -2319,6 +3184,18 @@ async def add_channel_handler(message: Message, command: CommandObject):
     except Exception:
         await message.answer("Kanal topilmadi.")
         return
+    try:
+        member = await message.bot.get_chat_member(chat.id, message.from_user.id)
+    except Exception:
+        await message.answer("Kanal a'zolik holatini tekshirib bo'lmadi.")
+        return
+    if member.status not in {ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR}:
+        await message.answer("Iltimos, avval kanalda admin qiling.")
+        return
+    can_post = getattr(member, "can_post_messages", None)
+    if can_post is False:
+        await message.answer("Kanalda post yozish huquqi yo'q. Ruxsat bering.")
+        return
     invite_link = ""
     if not chat.username:
         if provided_invite:
@@ -2391,8 +3268,7 @@ async def add_part_handler(message: Message, command: CommandObject):
     if not serial:
         await message.answer("Drama topilmadi.")
         return
-    parts = get_serial_parts(serial["id"])
-    next_part = (max((p["part"] for p in parts), default=0) + 1) if parts else 1
+    next_part = _next_missing_part(serial["id"])
     save_serial_session(
         message.from_user.id,
         state="await_part",
@@ -2406,6 +3282,127 @@ async def add_part_handler(message: Message, command: CommandObject):
         "serial_addpart_start",
         message.from_user.id,
         f"serial_id={serial['id']} next_part={next_part}",
+    )
+
+
+@router.message(Command("import"))
+async def import_forum_handler(message: Message, command: CommandObject):
+    if not (_has_perm(message.from_user.id, "can_add_serial") and _has_perm(message.from_user.id, "can_add_part")):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    if not command.args:
+        await message.answer("Foydalanish: /import <guruh_linki>")
+        return
+    if message.from_user.id in IMPORT_TASKS or message.from_user.id in IMPORT_SESSIONS:
+        await message.answer("Import allaqachon ketmoqda. Tugashini kuting.")
+        return
+    group_ref = command.args.strip()
+    await message.answer("Import boshlandi. Bu biroz vaqt olishi mumkin.")
+    _log_event("forum_import_start", message.from_user.id, f"group_ref={group_ref}")
+    task = asyncio.create_task(_run_forum_import(message, group_ref))
+    IMPORT_TASKS[message.from_user.id] = task
+
+
+@router.message(Command("importcancel"))
+async def import_cancel_handler(message: Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Ruxsat yo'q.")
+        return
+    task = IMPORT_TASKS.pop(message.from_user.id, None)
+    if task:
+        task.cancel()
+    IMPORT_SESSIONS.pop(message.from_user.id, None)
+    await message.answer("Import bekor qilindi.")
+
+
+@router.message(Command("importstop"))
+async def import_stop_handler(message: Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Ruxsat yo'q.")
+        return
+    task = IMPORT_TASKS.pop(message.from_user.id, None)
+    if task:
+        task.cancel()
+    IMPORT_SESSIONS.pop(message.from_user.id, None)
+    await message.answer("Import to'xtatildi.")
+
+
+@router.callback_query(F.data.startswith("import:"))
+async def import_callback_handler(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    session = IMPORT_SESSIONS.get(user_id)
+    if not session:
+        await callback.answer("Import sessiya topilmadi.", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) < 2:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    action = parts[1]
+    per_page = 8
+    if action == "noop":
+        await callback.answer()
+        return
+    if action == "toggle":
+        if len(parts) != 3 or not parts[2].isdigit():
+            await callback.answer("Xatolik.", show_alert=True)
+            return
+        idx = int(parts[2])
+        excluded = session.get("excluded") or set()
+        if idx in excluded:
+            excluded.remove(idx)
+        else:
+            excluded.add(idx)
+        session["excluded"] = excluded
+    elif action == "page":
+        if len(parts) != 3 or not parts[2].isdigit():
+            await callback.answer("Xatolik.", show_alert=True)
+            return
+        session["page"] = int(parts[2])
+    elif action == "selectall":
+        session["excluded"] = set()
+    elif action == "selectnone":
+        topics = session.get("topics") or []
+        session["excluded"] = set(range(1, len(topics) + 1))
+    elif action == "confirm":
+        selected_topics = _import_selected_topics(session)
+        if not selected_topics:
+            await callback.answer("Hech narsa tanlanmagan.", show_alert=True)
+            return
+        total_parts = _import_selected_parts(session)
+        session["state"] = "confirm"
+        session["selected_topics"] = selected_topics
+        session["selected_parts"] = total_parts
+        parts_text = f"{total_parts} qism" if total_parts else "qismlar skan qilinadi"
+        await callback.message.edit_text(
+            f"Tanlandi: {len(selected_topics)} mavzu, {parts_text}. Tasdiqlaysizmi?",
+            reply_markup=_import_confirm_keyboard(),
+        )
+        return
+    elif action == "back":
+        session["state"] = "select"
+    elif action == "apply":
+        if session.get("state") != "confirm":
+            await callback.answer("Tasdiqlash kerak.", show_alert=True)
+            return
+        if user_id in IMPORT_TASKS:
+            await callback.answer("Import allaqachon ketmoqda.", show_alert=True)
+            return
+        await callback.message.edit_text("Import boshlanmoqda...")
+        task = asyncio.create_task(_apply_forum_import(callback.message, session))
+        IMPORT_TASKS[user_id] = task
+        return
+    elif action == "cancel":
+        IMPORT_SESSIONS.pop(user_id, None)
+        await callback.message.edit_text("Import bekor qilindi.")
+        return
+    else:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    page = int(session.get("page") or 0)
+    await callback.message.edit_text(
+        _render_import_selection_text(session, page, per_page),
+        reply_markup=_import_selection_keyboard(session, page, per_page),
     )
 
 
@@ -2425,6 +3422,7 @@ async def set_part_handler(message: Message, command: CommandObject):
     if part is None:
         await message.answer("Qism raqami faqat musbat raqam bo'lishi kerak.")
         return
+    SERIAL_UPLOAD_NEXT_PART[(message.from_user.id, int(session.get("serial_id") or 0))] = part
     save_serial_session(
         message.from_user.id,
         state="await_part",
@@ -2496,6 +3494,54 @@ async def admin_log_text_handler(message: Message):
 )
 async def admin_serial_text_handler(message: Message):
     session = get_serial_session(message.from_user.id)
+    raw_text = message.text.strip()
+    raw_lower = raw_text.lower()
+    if (
+        raw_lower in {"dramalar ro'yxati", "ortga"}
+        or "keyingi" in raw_lower
+        or "oldingi" in raw_lower
+    ):
+        if raw_lower == "dramalar ro'yxati":
+            await _send_user_serials_menu(message, page=0)
+            return
+        if raw_lower == "ortga":
+            USER_SERIALS_LIST.pop(message.from_user.id, None)
+            USER_SEARCH_SESSIONS.discard(message.from_user.id)
+            USER_SEARCH_RESULTS.pop(message.from_user.id, None)
+            await message.answer("Menyu:", reply_markup=user_keyboard())
+            return
+        state = USER_SERIALS_LIST.get(message.from_user.id)
+        if not state:
+            await _send_user_serials_menu(message, page=0)
+            return
+        mode = state.get("mode") or "list"
+        page = int(state.get("page") or 0)
+        total_pages = int(state.get("total_pages") or 1)
+        if raw_text == "⬅️ Oldingi":
+            page = max(0, page - 1)
+        else:
+            page = min(total_pages - 1, page + 1)
+        state["page"] = page
+        if mode == "search_db":
+            query = state.get("query") or ""
+            include_vip = bool(state.get("include_vip"))
+            page_serials = search_serials_by_title(
+                query,
+                include_vip,
+                USER_SERIALS_PER_PAGE,
+                page * USER_SERIALS_PER_PAGE,
+            )
+        else:
+            serials = state.get("serials") or []
+            start = page * USER_SERIALS_PER_PAGE
+            end = start + USER_SERIALS_PER_PAGE
+            page_serials = serials[start:end]
+        state["page_serials"] = page_serials
+        await message.answer(
+            "Dramalar ro'yxati:",
+            reply_markup=user_serials_menu_keyboard(page_serials, page, total_pages),
+        )
+        return
     state = session.get("state")
     if state == "await_title":
         if not _has_perm(message.from_user.id, "can_add_serial"):
@@ -2551,6 +3597,29 @@ async def admin_serial_text_handler(message: Message):
             await message.answer(prompt, reply_markup=serial_cancel_keyboard())
         else:
             await message.answer(prompt)
+        return
+
+
+@router.message(
+    lambda message: (
+        message.text
+        and not message.text.startswith("/")
+        and is_admin(message.from_user.id)
+        and message.from_user.id in IMPORT_SESSIONS
+    )
+)
+async def import_text_handler(message: Message):
+    session = IMPORT_SESSIONS.get(message.from_user.id) or {}
+    state = session.get("state")
+    raw = (message.text or "").strip().lower()
+    if state == "confirm":
+        if raw in {"yo'q", "yoq", "no"}:
+            IMPORT_SESSIONS.pop(message.from_user.id, None)
+            await message.answer("Import bekor qilindi.")
+            return
+        await message.answer(
+            "Tasdiqlash inline tugmalar orqali qilinadi. Bekor qilish uchun /importcancel."
+        )
         return
 
 
@@ -2624,13 +3693,107 @@ async def contact_admin_message_handler(message: Message):
     )
     for admin_id in admins:
         try:
-            await message.bot.send_message(admin_id, header)
-            await message.copy_to(admin_id)
+            header_msg = await message.bot.send_message(admin_id, header)
+            _remember_contact_reply(admin_id, header_msg.message_id, message.from_user.id)
+            copied = await message.copy_to(admin_id)
+            _remember_contact_reply(admin_id, copied.message_id, message.from_user.id)
         except Exception:
             continue
     CONTACT_ADMIN_SESSIONS.discard(message.from_user.id)
     await message.answer("Xabaringiz adminlarga yuborildi.", reply_markup=ReplyKeyboardRemove())
     await message.answer("Menyu:", reply_markup=user_keyboard())
+
+
+@router.message(
+    lambda message: (
+        message
+        and message.from_user
+        and message.reply_to_message
+        and _is_admin_user(message.from_user.id)
+    )
+)
+async def admin_reply_to_contact_handler(message: Message):
+    key = (message.from_user.id, message.reply_to_message.message_id)
+    target_id = CONTACT_REPLY_MAP.get(key)
+    if not target_id:
+        return
+    if is_blocked_user(int(target_id)):
+        return
+    try:
+        await message.copy_to(target_id)
+    except Exception:
+        pass
+
+
+@router.message(Command("usend"))
+async def userbot_send_handler(message: Message, command: CommandObject):
+    if not _has_perm(message.from_user.id, "can_broadcast"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    if not command.args:
+        await message.answer("Foydalanish: /usend <@username|user_id> [text]")
+        return
+    parts = command.args.split(maxsplit=1)
+    target_ref = parts[0].strip()
+    text = parts[1].strip() if len(parts) > 1 else ""
+    reply = message.reply_to_message
+    if reply and not text:
+        if reply.caption:
+            text = reply.caption
+        elif reply.text:
+            text = reply.text
+    try:
+        client = await get_userbot_client()
+    except UserbotError as err:
+        await message.answer(str(err))
+        return
+    try:
+        if target_ref.startswith("@"):
+            entity = await client.get_entity(target_ref)
+        elif target_ref.isdigit():
+            entity = await client.get_entity(int(target_ref))
+        else:
+            entity = await client.get_entity(target_ref)
+    except Exception:
+        await message.answer("Foydalanuvchi topilmadi.")
+        return
+    target_id = getattr(entity, "id", None)
+    if target_id is not None and is_blocked_user(int(target_id)):
+        return
+    media = reply if reply and (reply.photo or reply.video or reply.document) else None
+    if media:
+        temp_dir = tempfile.mkdtemp(prefix="userbot-send-")
+        try:
+            if media.photo:
+                file_id = media.photo[-1].file_id
+            elif media.document:
+                file_id = media.document.file_id
+            else:
+                file_id = media.video.file_id
+            file = await message.bot.get_file(file_id)
+            filename = file.file_path.split("/")[-1] if file.file_path else "upload.bin"
+            download_path = os.path.join(temp_dir, filename)
+            await message.bot.download_file(file.file_path, download_path)
+            await client.send_file(entity, download_path, caption=text or None)
+        except Exception:
+            await message.answer("Media yuborishda xatolik.")
+            return
+        finally:
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception:
+                pass
+        await message.answer("Yuborildi.")
+        return
+    if not text:
+        await message.answer("Matn yoki reply kerak.")
+        return
+    try:
+        await client.send_message(entity, text)
+    except Exception:
+        await message.answer("Xabar yuborilmadi.")
+        return
+    await message.answer("Yuborildi.")
 
 
 @router.message(
@@ -2652,6 +3815,63 @@ async def broadcast_media_handler(message: Message):
         "reply_message_id": message.message_id,
     }
     await message.answer("Kimlarga yuborilsin?", reply_markup=broadcast_target_keyboard())
+
+
+@router.message(
+    F.text,
+    lambda message: (
+        message
+        and message.from_user
+        and message.from_user.id in POST_SESSIONS
+        and POST_SESSIONS.get(message.from_user.id, {}).get("state") == "await_code"
+    ),
+)
+async def post_code_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_broadcast"):
+        return
+    code = _parse_code(message.text or "")
+    if not code:
+        await message.answer("Kod faqat raqam bo'lishi kerak.")
+        return
+    serial = get_serial_by_code(int(code))
+    if not serial:
+        await message.answer("Drama topilmadi.")
+        return
+    parts_count = len(get_serial_parts(serial["id"]))
+    session = POST_SESSIONS.get(message.from_user.id)
+    if not session:
+        return
+    session.update(
+        {
+            "serial_id": serial["id"],
+            "title": serial["title"],
+            "code": serial["code"],
+            "parts_count": parts_count,
+            "state": "await_media",
+        }
+    )
+    await message.answer("Rasm va caption yuboring.", reply_markup=post_media_keyboard())
+
+
+@router.message(
+    F.text,
+    lambda message: (
+        message
+        and message.from_user
+        and message.from_user.id in POST_SESSIONS
+        and POST_SESSIONS.get(message.from_user.id, {}).get("state") == "await_media"
+    ),
+)
+async def post_caption_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_broadcast"):
+        return
+    if not message.text:
+        return
+    session = POST_SESSIONS.get(message.from_user.id)
+    if not session:
+        return
+    session["caption"] = message.text.strip()
+    await message.answer("Rasm yuboring.", reply_markup=post_media_keyboard())
 
 
 @router.message(
@@ -2741,28 +3961,59 @@ async def restore_db_callback(callback: CallbackQuery):
     _log_event("restore_db_success", callback.from_user.id, f"backup={backup_path}")
 
 
-@router.message(F.photo)
+@router.message(F.photo | F.document)
 async def post_photo_handler(message: Message):
-    if not _has_perm(message.from_user.id, "can_view_lists"):
+    if not _has_perm(message.from_user.id, "can_broadcast"):
         return
     session = POST_SESSIONS.get(message.from_user.id)
     if not session:
+        return
+    if session.get("state") != "await_media":
+        return
+    if message.document:
+        mime_type = message.document.mime_type or ""
+        if not mime_type.startswith("image/"):
+            await message.answer("Faqat rasm yuboring.")
+            return
+    caption = message.caption or session.get("caption") or ""
+    if not caption.strip():
+        await message.answer("Caption yuboring yoki avval matn yuboring.")
         return
     link = await _get_start_link(message.bot, int(session["code"]))
     if not link:
         await message.answer("Bot linkini olishda xatolik.")
         return
-    text = _build_serial_post_text(session["title"], session["parts_count"], link)
-    photo = message.photo[-1]
-    await message.answer_photo(
-        photo.file_id,
-        caption=text,
-        reply_markup=post_link_keyboard(link),
-    )
+    try:
+        if message.photo:
+            photo = message.photo[-1]
+            await message.bot.send_photo(
+                chat_id=int(session["channel_id"]),
+                photo=photo.file_id,
+                caption=caption,
+                reply_markup=post_link_keyboard(link),
+            )
+        else:
+            await message.bot.send_document(
+                chat_id=int(session["channel_id"]),
+                document=message.document.file_id,
+                caption=caption,
+                reply_markup=post_link_keyboard(link),
+            )
+    except Exception:
+        await message.answer("Kanalga yuborishda xatolik.")
+        return
     POST_SESSIONS.pop(message.from_user.id, None)
-    _log_event("post_created", message.from_user.id, f"serial_id={session['serial_id']}")
+    await message.answer("Post kanalga yuborildi.")
+    _log_event(
+        "post_created",
+        message.from_user.id,
+        f"serial_id={session['serial_id']} channel_id={session.get('channel_id')}",
+    )
 async def _show_serial_parts(message: Message, serial_id: int) -> bool:
     parts = get_serial_parts(serial_id)
+    serial = get_serial_by_id(serial_id)
+    if serial and serial.get("is_vip") and not _is_admin_user(message.from_user.id):
+        parts = [p for p in parts if not _is_vip_part_expired(p.get("created_at"))]
     if not parts:
         return False
     part_numbers = [int(item["part"]) for item in parts if item.get("part") is not None]
@@ -2788,10 +4039,20 @@ async def _send_serial_part(
         return False
     caption = item.get("caption") or None
     serial = get_serial_by_id(serial_id)
+    if (
+        serial
+        and serial.get("is_vip")
+        and not _is_admin_user(message.from_user.id)
+        and _is_vip_part_expired(item.get("created_at"))
+    ):
+        await message.answer("VIP qism muddati tugagan.")
+        return False
     if serial:
         record_serial_view(_today(), int(serial["code"]))
     if part_numbers is None:
         parts = get_serial_parts(serial_id)
+        if serial and serial.get("is_vip") and not _is_admin_user(message.from_user.id):
+            parts = [p for p in parts if not _is_vip_part_expired(p.get("created_at"))]
         part_numbers = [int(row["part"]) for row in parts if row.get("part") is not None]
     part_numbers_sorted = sorted(part_numbers) if part_numbers else []
     parts_count = len(part_numbers_sorted)
@@ -2821,6 +4082,7 @@ async def _send_serial_part(
     )
     source_chat_id = item.get("source_chat_id")
     source_message_id = item.get("source_message_id")
+    sent_message = None
     if source_chat_id and source_message_id:
         copied = await _safe_copy_message(
             message.bot,
@@ -2829,6 +4091,7 @@ async def _send_serial_part(
             source_message_id,
         )
         if copied:
+            sent_message = copied
             if reply_markup:
                 await _safe_edit_reply_markup(
                     message.bot,
@@ -2836,24 +4099,26 @@ async def _send_serial_part(
                     copied.message_id,
                     reply_markup,
                 )
-            return True
-    if item.get("file_type") == "document":
-        ok = await _safe_send_document(
-            message,
-            item["file_id"],
-            caption,
-            reply_markup=reply_markup,
-        )
-    else:
-        ok = await _safe_send_video(
-            message,
-            item["file_id"],
-            caption,
-            reply_markup=reply_markup,
-        )
-    if ok:
+    if sent_message is None:
+        if item.get("file_type") == "document":
+            sent_message = await _safe_send_document(
+                message,
+                item["file_id"],
+                caption,
+                reply_markup=reply_markup,
+            )
+        else:
+            sent_message = await _safe_send_video(
+                message,
+                item["file_id"],
+                caption,
+                reply_markup=reply_markup,
+            )
+    if sent_message:
+        if serial and serial.get("is_vip") and not _is_admin_user(message.from_user.id):
+            _schedule_delete_message(message.bot, message.chat.id, sent_message.message_id)
         return True
-    if not ok:
+    if not sent_message:
         await message.answer("Dramani yuborib bo'lmadi.")
         _log_event(
             "serial_send_failed",
@@ -3179,7 +4444,46 @@ async def vip_reminder_loop(bot) -> None:
             await _run_vip_reminders(bot)
         except Exception:
             pass
-        await asyncio.sleep(3600)
+        await asyncio.sleep(VIP_REMINDER_INTERVAL)
+
+
+async def cache_cleanup_loop() -> None:
+    if CACHE_CLEAN_INTERVAL <= 0:
+        return
+    while True:
+        await asyncio.sleep(CACHE_CLEAN_INTERVAL)
+        try:
+            for user_id in list(USER_SEARCH_RESULTS.keys()):
+                if user_id not in USER_SEARCH_SESSIONS:
+                    USER_SEARCH_RESULTS.pop(user_id, None)
+            for user_id in list(BROADCAST_SESSIONS.keys()):
+                if user_id not in BROADCAST_TEXT_SESSIONS:
+                    BROADCAST_SESSIONS.pop(user_id, None)
+        except Exception:
+            pass
+
+
+def _seconds_until_next_backup(now: dt.datetime, tz: ZoneInfo) -> float:
+    local_now = now.astimezone(tz)
+    next_run = local_now.replace(hour=6, minute=0, second=0, microsecond=0)
+    if local_now >= next_run:
+        next_run += dt.timedelta(days=1)
+    return (next_run - local_now).total_seconds()
+
+
+async def backup_schedule_loop(bot) -> None:
+    tz = ZoneInfo(BACKUP_TZ)
+    while True:
+        try:
+            delay = _seconds_until_next_backup(dt.datetime.utcnow(), tz)
+            await asyncio.sleep(max(60, delay))
+            path = _build_scheduled_backup()
+            if path:
+                if OWNER_ID:
+                    await bot.send_document(OWNER_ID, FSInputFile(path), caption="Backup")
+                _log_event("backup_scheduled", None, f"path={path}")
+        except Exception:
+            pass
 
 
 async def _run_vip_reminders(bot) -> None:
@@ -3189,6 +4493,8 @@ async def _run_vip_reminders(bot) -> None:
     now = dt.datetime.utcnow()
     price = _get_vip_price()
     for item in users:
+        if is_blocked_user(int(item["user_id"])):
+            continue
         try:
             expires_at = dt.datetime.fromisoformat(item["expires_at"])
         except Exception:
@@ -3230,6 +4536,16 @@ async def _run_vip_reminders(bot) -> None:
                 pass
 
 
+def _is_vip_part_expired(created_at: Optional[str]) -> bool:
+    if not created_at:
+        return False
+    try:
+        created = dt.datetime.fromisoformat(created_at)
+    except Exception:
+        return False
+    return created <= (dt.datetime.utcnow() - dt.timedelta(hours=24))
+
+
 async def _process_serial_part_message(message: Message, serial_id: int) -> None:
     if not _has_perm(message.from_user.id, "can_add_part"):
         await message.answer("Bu buyruq uchun ruxsat yo'q.")
@@ -3237,9 +4553,7 @@ async def _process_serial_part_message(message: Message, serial_id: int) -> None
     key = (message.from_user.id, serial_id)
     part = SERIAL_UPLOAD_NEXT_PART.get(key)
     if part is None:
-        session = get_serial_session(message.from_user.id)
-        part = session.get("next_part") if session else None
-        part = part or 1
+        part = _next_missing_part(serial_id)
     while serial_part_exists(serial_id, part):
         part += 1
     SERIAL_UPLOAD_NEXT_PART[key] = part
@@ -3250,12 +4564,13 @@ async def _process_serial_part_message(message: Message, serial_id: int) -> None
     if not SOURCE_CHANNEL_ID:
         await message.answer("SOURCE_CHANNEL_ID sozlanmagan.")
         return
+    safe_caption = _strip_links(caption or "")
     msg = await _safe_send_to_channel(
         message.bot,
         SOURCE_CHANNEL_ID,
         file_id,
         file_type,
-        caption,
+        safe_caption,
     )
     if not msg:
         await message.answer("Kanalga yuklab bo'lmadi.")
@@ -3265,7 +4580,7 @@ async def _process_serial_part_message(message: Message, serial_id: int) -> None
         part,
         file_id,
         file_type,
-        caption or "",
+        safe_caption,
         source_chat_id=msg.chat.id,
         source_message_id=msg.message_id,
     )
@@ -3287,7 +4602,7 @@ async def _process_serial_part_message(message: Message, serial_id: int) -> None
                     prompt,
                     reply_markup=_new_part_broadcast_keyboard(kind, serial_id, part),
                 )
-    next_part = part + 1
+    next_part = _next_missing_part(serial_id)
     SERIAL_UPLOAD_NEXT_PART[key] = next_part
     save_serial_session(
         message.from_user.id,
@@ -3363,6 +4678,69 @@ async def backup_handler(message: Message):
     _log_event("backup_sent", message.from_user.id)
 
 
+@router.message(Command("setuserbotsession"))
+async def set_userbot_session_handler(message: Message, command: CommandObject):
+    if message.from_user.id != OWNER_ID:
+        await message.answer("Bu buyruq faqat owner uchun.")
+        return
+    value = (command.args or "").strip()
+    if not value:
+        await message.answer("Foydalanish: /setuserbotsession <session_string>")
+        return
+    set_userbot_session(value)
+    await reset_userbot_client()
+    await message.answer("Userbot session yangilandi.")
+
+
+@router.message(Command("clearuserbotsession"))
+async def clear_userbot_session_handler(message: Message):
+    if message.from_user.id != OWNER_ID:
+        await message.answer("Bu buyruq faqat owner uchun.")
+        return
+    set_userbot_session("")
+    await reset_userbot_client()
+    await message.answer("Userbot session tozalandi.")
+
+
+@router.message(Command("setuserbotapiid"))
+async def set_userbot_api_id_handler(message: Message, command: CommandObject):
+    if message.from_user.id != OWNER_ID:
+        await message.answer("Bu buyruq faqat owner uchun.")
+        return
+    value = (command.args or "").strip()
+    if not value or not value.isdigit():
+        await message.answer("Foydalanish: /setuserbotapiid <raqam>")
+        return
+    set_userbot_api_id(value)
+    await reset_userbot_client()
+    await message.answer("USERBOT_API_ID yangilandi.")
+
+
+@router.message(Command("setuserbotapihash"))
+async def set_userbot_api_hash_handler(message: Message, command: CommandObject):
+    if message.from_user.id != OWNER_ID:
+        await message.answer("Bu buyruq faqat owner uchun.")
+        return
+    value = (command.args or "").strip()
+    if not value:
+        await message.answer("Foydalanish: /setuserbotapihash <hash>")
+        return
+    set_userbot_api_hash(value)
+    await reset_userbot_client()
+    await message.answer("USERBOT_API_HASH yangilandi.")
+
+
+@router.message(Command("clearuserbotapi"))
+async def clear_userbot_api_handler(message: Message):
+    if message.from_user.id != OWNER_ID:
+        await message.answer("Bu buyruq faqat owner uchun.")
+        return
+    set_userbot_api_id("")
+    set_userbot_api_hash("")
+    await reset_userbot_client()
+    await message.answer("USERBOT_API_ID va USERBOT_API_HASH tozalandi.")
+
+
 @router.chat_join_request()
 async def join_request_handler(join_request: ChatJoinRequest):
     add_join_request(
@@ -3375,6 +4753,7 @@ async def join_request_handler(join_request: ChatJoinRequest):
 async def _broadcast_to_users(message: Message, text: Optional[str]) -> tuple[int, int]:
     ok = 0
     failed = 0
+    counter = 0
     for user in get_users():
         user_id = user.get("user_id") if isinstance(user, dict) else user
         if not user_id:
@@ -3392,6 +4771,9 @@ async def _broadcast_to_users(message: Message, text: Optional[str]) -> tuple[in
         except Exception:
             _log_event("broadcast_failed", message.from_user.id, f"user_id={user_id} error=unknown")
             failed += 1
+        counter += 1
+        if BROADCAST_BATCH_EVERY and BROADCAST_BATCH_SLEEP and counter % BROADCAST_BATCH_EVERY == 0:
+            await asyncio.sleep(BROADCAST_BATCH_SLEEP)
     return ok, failed
 
 
@@ -3404,7 +4786,10 @@ async def _broadcast_to_user_ids(
 ) -> tuple[int, int]:
     ok = 0
     failed = 0
+    counter = 0
     for user_id in user_ids:
+        if is_blocked_user(int(user_id)):
+            continue
         try:
             if reply_message_id and from_chat_id:
                 await message.bot.copy_message(
@@ -3422,14 +4807,61 @@ async def _broadcast_to_user_ids(
         except Exception:
             _log_event("broadcast_failed", message.from_user.id, f"user_id={user_id} error=unknown")
             failed += 1
+        counter += 1
+        if BROADCAST_BATCH_EVERY and BROADCAST_BATCH_SLEEP and counter % BROADCAST_BATCH_EVERY == 0:
+            await asyncio.sleep(BROADCAST_BATCH_SLEEP)
+    return ok, failed
+
+
+async def _broadcast_serial_notification(
+    message: Message,
+    user_ids: list[int],
+    serial_id: int,
+    text: str,
+) -> tuple[int, int]:
+    prefs = get_serial_notification_map(serial_id)
+    ok = 0
+    failed = 0
+    counter = 0
+    for user_id in user_ids:
+        pref = prefs.get(user_id, {})
+        if pref.get("muted"):
+            continue
+        first_time = not pref.get("notified")
+        send_text = text
+        reply_markup = None
+        if first_time:
+            send_text = (
+                f"{text}\n\nBu drama uchun bildirishnomalarni o'chirishni xohlaysizmi?"
+            )
+            reply_markup = _serial_notify_optout_keyboard(serial_id)
+        try:
+            await message.bot.send_message(
+                chat_id=user_id,
+                text=send_text,
+                reply_markup=reply_markup,
+            )
+            ok += 1
+            if first_time:
+                mark_serial_notification_sent(user_id, serial_id)
+        except TelegramAPIError as exc:
+            _log_event("broadcast_failed", message.from_user.id, f"user_id={user_id} error={exc}")
+            failed += 1
+        except Exception:
+            _log_event("broadcast_failed", message.from_user.id, f"user_id={user_id} error=unknown")
+            failed += 1
+        counter += 1
+        if BROADCAST_BATCH_EVERY and BROADCAST_BATCH_SLEEP and counter % BROADCAST_BATCH_EVERY == 0:
+            await asyncio.sleep(BROADCAST_BATCH_SLEEP)
     return ok, failed
 
 
 def _collect_broadcast_targets(kind: str) -> list[int]:
+    blocked_ids = {int(uid) for uid in get_blocked_users()}
     if kind == "admins":
-        return list({int(admin_id) for admin_id in get_admins()})
+        return list({int(admin_id) for admin_id in get_admins()} - blocked_ids)
     users = [user.get("user_id") for user in get_users() if user.get("user_id")]
-    users_set = {int(uid) for uid in users}
+    users_set = {int(uid) for uid in users} - blocked_ids
     if kind == "all":
         return list(users_set)
     vip_ids = {
@@ -3437,11 +4869,12 @@ def _collect_broadcast_targets(kind: str) -> list[int]:
         for item in get_vip_users()
         if item.get("user_id") and _is_vip_user(int(item["user_id"]))
     }
+    vip_ids -= blocked_ids
     if kind == "vip":
         return list(vip_ids)
     if kind == "regular":
         admin_ids = {int(admin_id) for admin_id in get_admins()}
-        return list(users_set - vip_ids - admin_ids)
+        return list(users_set - vip_ids - admin_ids - blocked_ids)
     return list(users_set)
 
 
@@ -3584,11 +5017,7 @@ async def new_drama_broadcast_callback(callback: CallbackQuery):
         await callback.message.edit_text("Foydalanuvchilar topilmadi.")
         return
     text = _build_new_drama_text(serial["title"], int(serial["code"]))
-    ok, failed = await _broadcast_to_user_ids(
-        callback.message,
-        targets,
-        text=text,
-    )
+    ok, failed = await _broadcast_serial_notification(callback.message, targets, serial_id, text)
     await callback.message.edit_text(f"Yuborildi: {ok}, xatolik: {failed}")
     _log_event(
         "broadcast_new_drama",
@@ -3626,14 +5055,33 @@ async def new_part_broadcast_callback(callback: CallbackQuery):
         await callback.message.edit_text("Foydalanuvchilar topilmadi.")
         return
     text = _build_new_part_text(serial["title"], int(serial["code"]), part)
-    ok, failed = await _broadcast_to_user_ids(
-        callback.message,
-        targets,
-        text=text,
-    )
+    ok, failed = await _broadcast_serial_notification(callback.message, targets, serial_id, text)
     await callback.message.edit_text(f"Yuborildi: {ok}, xatolik: {failed}")
     _log_event(
         "broadcast_new_part",
         callback.from_user.id,
         f"serial_id={serial_id} part={part} target={target} ok={ok} failed={failed}",
     )
+
+
+@router.callback_query(F.data.startswith("serialnotify:"))
+async def serial_notify_callback(callback: CallbackQuery):
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    action = parts[1]
+    try:
+        serial_id = int(parts[2])
+    except ValueError:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    if action != "off":
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    set_serial_notification_muted(callback.from_user.id, serial_id, 1)
+    await callback.answer("Bildirishnomalar o'chirildi.")
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
