@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.enums import ChatMemberStatus
-from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
+from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter, TelegramForbiddenError
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import CallbackQuery, ChatJoinRequest, FSInputFile, Message, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -1083,10 +1083,14 @@ async def ensure_subscribed(message: Message, user_id: Optional[int] = None) -> 
         return True
     ok = await _check_subscriptions(message.bot, user_id, channels)
     if not ok:
-        await message.answer(
-            "Iltimos, quyidagi kanallarga obuna bo'ling.",
-            reply_markup=subscribe_keyboard(channels),
-        )
+        try:
+            await message.answer(
+                "Iltimos, quyidagi kanallarga obuna bo'ling.",
+                reply_markup=subscribe_keyboard(channels),
+            )
+        except TelegramForbiddenError:
+            block_user(user_id)
+            _log_event("bot_blocked", user_id, "ensure_subscribed")
         return False
     return True
 
@@ -1101,10 +1105,14 @@ async def ensure_subscribed_callback(callback: CallbackQuery) -> bool:
         return True
     ok = await _check_subscriptions(callback.bot, callback.from_user.id, channels)
     if not ok:
-        await callback.message.answer(
-            "Iltimos, quyidagi kanallarga obuna bo'ling.",
-            reply_markup=subscribe_keyboard(channels),
-        )
+        try:
+            await callback.message.answer(
+                "Iltimos, quyidagi kanallarga obuna bo'ling.",
+                reply_markup=subscribe_keyboard(channels),
+            )
+        except TelegramForbiddenError:
+            block_user(callback.from_user.id)
+            _log_event("bot_blocked", callback.from_user.id, "ensure_subscribed_callback")
         return False
     return True
 
@@ -5127,45 +5135,6 @@ async def _broadcast_serial_notification(
     return ok, failed
 
 
-async def _broadcast_serial_notification_userbot(
-    message: Message,
-    user_ids: list[int],
-    serial_id: int,
-    text: str,
-) -> tuple[int, int]:
-    prefs = get_serial_notification_map(serial_id)
-    ok = 0
-    failed = 0
-    try:
-        client = await get_userbot_client()
-    except UserbotError as err:
-        await message.answer(str(err))
-        return 0, len(user_ids)
-    for user_id in user_ids:
-        pref = prefs.get(user_id, {})
-        if pref.get("muted"):
-            continue
-        first_time = not pref.get("notified")
-        if first_time:
-            try:
-                await message.bot.send_message(
-                    chat_id=user_id,
-                    text=f"{text}\n\nBu drama uchun bildirishnomalarni o'chirishni xohlaysizmi?",
-                    reply_markup=_serial_notify_optout_keyboard(serial_id),
-                )
-                mark_serial_notification_sent(user_id, serial_id)
-                ok += 1
-            except Exception:
-                failed += 1
-            continue
-        try:
-            await client.send_message(user_id, text)
-            ok += 1
-        except Exception:
-            failed += 1
-    return ok, failed
-
-
 def _collect_broadcast_targets(kind: str) -> list[int]:
     blocked_ids = {int(uid) for uid in get_blocked_users()}
     if kind == "admins":
@@ -5327,7 +5296,7 @@ async def new_drama_broadcast_callback(callback: CallbackQuery):
         await callback.message.edit_text("Foydalanuvchilar topilmadi.")
         return
     text = _build_new_drama_text(serial["title"], int(serial["code"]))
-    ok, failed = await _broadcast_serial_notification_userbot(
+    ok, failed = await _broadcast_serial_notification(
         callback.message,
         targets,
         serial_id,
@@ -5370,7 +5339,7 @@ async def new_part_broadcast_callback(callback: CallbackQuery):
         await callback.message.edit_text("Foydalanuvchilar topilmadi.")
         return
     text = _build_new_part_text(serial["title"], int(serial["code"]), part)
-    ok, failed = await _broadcast_serial_notification_userbot(
+    ok, failed = await _broadcast_serial_notification(
         callback.message,
         targets,
         serial_id,
