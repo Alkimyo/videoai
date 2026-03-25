@@ -4744,9 +4744,17 @@ async def cache_cleanup_loop() -> None:
 
 def _seconds_until_next_backup(now: dt.datetime, tz: ZoneInfo) -> float:
     local_now = now.astimezone(tz)
-    next_run = local_now.replace(hour=6, minute=0, second=0, microsecond=0)
-    if local_now >= next_run:
-        next_run += dt.timedelta(days=1)
+    hours = [6, 16, 20]
+
+    candidates = []
+    for day_offset in (0, 1):
+        day = local_now.date() + dt.timedelta(days=day_offset)
+        for h in hours:
+            candidates.append(
+                dt.datetime(day.year, day.month, day.day, h, 0, 0, tzinfo=tz)
+            )
+
+    next_run = min(t for t in candidates if t > local_now)
     return (next_run - local_now).total_seconds()
 
 
