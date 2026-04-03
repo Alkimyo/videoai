@@ -15,7 +15,14 @@ from aiogram import F, Router
 from aiogram.enums import ChatMemberStatus
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter, TelegramForbiddenError
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import CallbackQuery, ChatJoinRequest, FSInputFile, Message, ReplyKeyboardRemove
+from aiogram.types import (
+    CallbackQuery,
+    ChatJoinRequest,
+    ChatPermissions,
+    FSInputFile,
+    Message,
+    ReplyKeyboardRemove,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from telethon.errors import FloodWaitError
 from telethon.tl.functions.messages import GetBotCallbackAnswerRequest
@@ -82,6 +89,7 @@ from app.db import (
     get_serial_notification_map,
     mark_serial_notification_sent,
     set_serial_notification_muted,
+    get_serial_notification,
     get_serial_total_views_map,
     block_user,
     unblock_user,
@@ -131,7 +139,7 @@ from app.userbot import (
     set_userbot_session,
 )
 
-SERIAL_PARTS_PER_PAGE = 20
+SERIAL_PARTS_PER_PAGE = 30
 SERIALS_PER_PAGE = 20
 USERS_PER_PAGE = 20
 ADMINS_PER_PAGE = 20
@@ -184,6 +192,11 @@ ADMIN_PERMISSION_LABELS = {
 
 SERIAL_RENAME_SESSIONS: dict[int, int] = {}
 SERIAL_BANNER_SESSIONS: dict[int, int] = {}
+PENDING_START_CODES: dict[int, tuple[int, Optional[int], float]] = {}
+GROUP_SPAM_TRACKER: dict[tuple[int, int], deque[float]] = {}
+GROUP_SPAM_WINDOW = 60
+GROUP_SPAM_LIMIT = 3
+GROUP_MUTE_SECONDS = 120
 
 ADMIN_PERMISSION_KEYS = list(ADMIN_PERMISSION_LABELS.keys())
 
@@ -1055,7 +1068,8 @@ BACKUP_KEEP = 7
 BACKUP_TZ = "Asia/Tashkent"
 
 
-async def _check_subscriptions(bot, user_id: int, channels: list) -> bool:
+async def _get_missing_subscriptions(bot, user_id: int, channels: list) -> list[dict]:
+    missing = []
     for channel in channels:
         chat_id = int(channel["chat_id"])
         try:
@@ -1063,30 +1077,104 @@ async def _check_subscriptions(bot, user_id: int, channels: list) -> bool:
         except Exception:
             if has_join_request(chat_id, user_id):
                 continue
-            return False
+            missing.append(channel)
+            continue
         if member.status in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}:
             if has_join_request(chat_id, user_id):
                 continue
-            return False
-    return True
+            missing.append(channel)
+    return missing
+
+
+async def _is_group_admin(message: Message) -> bool:
+    if not message or not message.from_user:
+        return False
+    if message.chat.type not in {"group", "supergroup"}:
+        return False
+    try:
+        member = await message.bot.get_chat_member(message.chat.id, message.from_user.id)
+    except Exception:
+        return False
+    return member.status in {ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR}
+
+
+async def _get_bot_member(message: Message):
+    try:
+        me = await message.bot.get_me()
+        return await message.bot.get_chat_member(message.chat.id, me.id)
+    except Exception:
+        return None
+
+
+async def _is_bot_admin_in_group(message: Message) -> bool:
+    if message.chat.type not in {"group", "supergroup"}:
+        return False
+    member = await _get_bot_member(message)
+    if not member:
+        return False
+    return member.status in {ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR}
+
+
+async def _maybe_restrict_group_spam(message: Message) -> bool:
+    if message.chat.type not in {"group", "supergroup"}:
+        return False
+    if not message.from_user:
+        return False
+    try:
+        user_member = await message.bot.get_chat_member(message.chat.id, message.from_user.id)
+    except Exception:
+        return False
+    if user_member.status in {ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR}:
+        return False
+    now = time.time()
+    key = (int(message.chat.id), int(message.from_user.id))
+    timestamps = GROUP_SPAM_TRACKER.setdefault(key, deque())
+    while timestamps and now - timestamps[0] > GROUP_SPAM_WINDOW:
+        timestamps.popleft()
+    timestamps.append(now)
+    if len(timestamps) < GROUP_SPAM_LIMIT:
+        return False
+    bot_member = await _get_bot_member(message)
+    if not bot_member:
+        return False
+    if bot_member.status not in {ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR}:
+        return False
+    can_restrict = getattr(bot_member, "can_restrict_members", False)
+    if not can_restrict:
+        return False
+    until = dt.datetime.utcnow() + dt.timedelta(seconds=GROUP_MUTE_SECONDS)
+    try:
+        await message.bot.restrict_chat_member(
+            message.chat.id,
+            message.from_user.id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=until,
+        )
+        return True
+    except Exception:
+        return False
 
 
 async def ensure_subscribed(message: Message, user_id: Optional[int] = None) -> bool:
     if user_id is None:
         user_id = message.from_user.id
+    if message.chat.type in {"group", "supergroup"}:
+        return True
     if _is_admin_user(user_id):
         return True
     if _is_vip_user(user_id):
         return True
+    if await _is_group_admin(message):
+        return True
     channels = get_channels()
     if not channels:
         return True
-    ok = await _check_subscriptions(message.bot, user_id, channels)
-    if not ok:
+    missing = await _get_missing_subscriptions(message.bot, user_id, channels)
+    if missing:
         try:
             await message.answer(
                 "Iltimos, quyidagi kanallarga obuna bo'ling.",
-                reply_markup=subscribe_keyboard(channels),
+                reply_markup=subscribe_keyboard(missing),
             )
         except TelegramForbiddenError:
             block_user(user_id)
@@ -1103,12 +1191,12 @@ async def ensure_subscribed_callback(callback: CallbackQuery) -> bool:
     channels = get_channels()
     if not channels:
         return True
-    ok = await _check_subscriptions(callback.bot, callback.from_user.id, channels)
-    if not ok:
+    missing = await _get_missing_subscriptions(callback.bot, callback.from_user.id, channels)
+    if missing:
         try:
             await callback.message.answer(
                 "Iltimos, quyidagi kanallarga obuna bo'ling.",
-                reply_markup=subscribe_keyboard(channels),
+                reply_markup=subscribe_keyboard(missing),
             )
         except TelegramForbiddenError:
             block_user(callback.from_user.id)
@@ -1120,11 +1208,33 @@ async def ensure_subscribed_callback(callback: CallbackQuery) -> bool:
 @router.callback_query(F.data == "check_subs")
 async def check_subs_callback(callback: CallbackQuery):
     channels = get_channels()
-    ok = await _check_subscriptions(callback.bot, callback.from_user.id, channels)
-    if ok:
+    missing = await _get_missing_subscriptions(callback.bot, callback.from_user.id, channels)
+    if not missing:
+        pending = _get_pending_start(callback.from_user.id)
+        if pending:
+            pending_code, pending_part = pending
+            _clear_pending_start(callback.from_user.id)
+            serial = get_serial_by_code(int(pending_code))
+            if serial:
+                if pending_part:
+                    if await _send_serial_part(
+                        callback.message,
+                        serial["id"],
+                        int(pending_part),
+                    ):
+                        await callback.message.edit_text("Obuna tasdiqlandi.")
+                        return
+                elif await _show_serial_parts(callback.message, serial["id"]):
+                    await callback.message.edit_text("Obuna tasdiqlandi.")
+                    return
+            await callback.message.edit_text("Obuna tasdiqlandi. Drama topilmadi.")
+            return
         await callback.message.edit_text("Obuna tasdiqlandi. Drama kodini yuboring.")
     else:
-        await callback.answer("Hali obuna emassiz.", show_alert=True)
+        await callback.message.edit_text(
+            "Hali obuna emassiz.",
+            reply_markup=subscribe_keyboard(missing),
+        )
 
 
 @router.callback_query(F.data == "user:sendcode")
@@ -1367,6 +1477,7 @@ async def user_like_toggle_callback(callback: CallbackQuery):
         page=0,
         per_page=SERIAL_PARTS_PER_PAGE,
         share_link=share_link,
+        notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
         rating=get_serial_rating(callback.from_user.id, serial_id),
         likes_count=likes_count,
         dislikes_count=dislikes_count,
@@ -1422,6 +1533,7 @@ async def user_like_legacy_callback(callback: CallbackQuery):
         page=0,
         per_page=SERIAL_PARTS_PER_PAGE,
         share_link=share_link,
+        notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
         rating=get_serial_rating(callback.from_user.id, serial_id),
         likes_count=likes_count,
         dislikes_count=dislikes_count,
@@ -1502,6 +1614,7 @@ async def serial_page_callback(callback: CallbackQuery):
             part_numbers,
             page=page,
             per_page=SERIAL_PARTS_PER_PAGE,
+            notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
             rating=rating,
             likes_count=likes_count,
             dislikes_count=dislikes_count,
@@ -1520,6 +1633,19 @@ def _parse_code(raw: str) -> Optional[str]:
     return str(int(value))
 
 
+def _parse_start_payload(raw: str) -> tuple[Optional[int], Optional[int]]:
+    value = (raw or "").strip()
+    if not value:
+        return None, None
+    if "_" in value:
+        parts = value.split("_", 1)
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            return int(parts[0]), int(parts[1])
+    if value.isdigit():
+        return int(value), None
+    return None, None
+
+
 def _parse_part(raw: str) -> Optional[int]:
     value = raw.strip()
     if not value.isdigit():
@@ -1532,11 +1658,45 @@ def _now() -> str:
     return dt.datetime.utcnow().isoformat()
 
 
+def _remember_pending_start(user_id: int, code: int, part: Optional[int]) -> None:
+    PENDING_START_CODES[user_id] = (code, part, time.time())
+
+
+def _clear_pending_start(user_id: int) -> None:
+    PENDING_START_CODES.pop(user_id, None)
+
+
+def _get_pending_start(user_id: int) -> Optional[tuple[int, Optional[int]]]:
+    item = PENDING_START_CODES.get(user_id)
+    if not item:
+        return None
+    code, part, ts = item
+    if time.time() - ts > 86400:
+        PENDING_START_CODES.pop(user_id, None)
+        return None
+    return code, part
+
+
 def _pretty_title_text(title: str) -> str:
     clean = (title or "").strip()
     if not clean:
         return "🎬 DRAMA 🎬"
     return f"🎬 {clean.upper()} 🎬"
+
+
+def _is_serial_notify_enabled(user_id: int, serial_id: int) -> bool:
+    info = get_serial_notification(user_id, serial_id)
+    if not info:
+        return True
+    return not bool(info.get("muted"))
+
+
+def _broadcast_attach_keyboard():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="Ha", callback_data="broadcastattach:yes")
+    kb.button(text="Yo'q", callback_data="broadcastattach:no")
+    kb.adjust(2)
+    return kb.as_markup()
 
 
 def _log_event(event: str, user_id: Optional[int] = None, detail: str = "") -> None:
@@ -1660,6 +1820,26 @@ async def _get_start_link(bot, serial_code: int) -> Optional[str]:
     if not me.username:
         return None
     return f"https://t.me/{me.username}?start={serial_code}"
+
+
+async def _get_start_link_with_payload(bot, payload: str) -> Optional[str]:
+    try:
+        me = await bot.get_me()
+    except Exception:
+        return None
+    if not me.username:
+        return None
+    return f"https://t.me/{me.username}?start={payload}"
+
+
+async def _get_start_group_link(bot) -> Optional[str]:
+    try:
+        me = await bot.get_me()
+    except Exception:
+        return None
+    if not me.username:
+        return None
+    return f"https://t.me/{me.username}?startgroup=1"
 
 
 def _build_serial_post_text(title: str, parts_count: int, link: str) -> str:
@@ -1832,23 +2012,62 @@ async def _safe_send_to_channel(
 async def start_handler(message: Message, command: CommandObject):
     add_user(message.from_user.id, message.from_user.username)
     _log_event("user_start", message.from_user.id)
-    if not await ensure_subscribed(message):
-        return
     if command.args:
-        code = _parse_code(command.args)
+        code, part = _parse_start_payload(command.args)
         if code:
+            if not await ensure_subscribed(message):
+                _remember_pending_start(message.from_user.id, int(code), part)
+                return
+            _clear_pending_start(message.from_user.id)
             serial = get_serial_by_code(int(code))
-            if serial and await _show_serial_parts(message, serial["id"]):
+            if not serial:
+                await message.answer("Drama topilmadi.")
+                return
+            if part:
+                if await _send_serial_part(message, serial["id"], int(part)):
+                    return
+                await message.answer("Qism topilmadi.")
+                return
+            if await _show_serial_parts(message, serial["id"]):
                 return
             await message.answer("Drama topilmadi.")
             return
+    if not await ensure_subscribed(message):
+        return
+    _clear_pending_start(message.from_user.id)
     banner = (
-        "====================\n"
-        " D R A M A L A R U Z B E K B O T\n"
-        "====================\n"
-        "Drama kodini yuboring."
+        "Qadrli dramshik sizni botimizda ko'rganimizdan xursandmiz 🙂\n"
+        "O'zingizga kerakli qismni tanlab contentlardan bahramand bo'ling."
     )
     await message.answer(banner, reply_markup=user_keyboard())
+    if message.chat.type == "private":
+        group_link = await _get_start_group_link(message.bot)
+        if group_link:
+            kb = InlineKeyboardBuilder()
+            kb.button(text="Guruhga qo'shish", url=group_link)
+            kb.adjust(1)
+            await message.answer(
+                "Guruhda foydalanish:\n"
+                "- /drama <nom|kod> yuboring\n"
+                "- 1-qism chiqadi va qismlar tugmalari chiqadi",
+                reply_markup=kb.as_markup(),
+            )
+
+
+@router.message(F.new_chat_members)
+async def bot_added_to_group_handler(message: Message):
+    if message.chat.type not in {"group", "supergroup"}:
+        return
+    try:
+        me = await message.bot.get_me()
+    except Exception:
+        return
+    if not any(member.id == me.id for member in (message.new_chat_members or [])):
+        return
+    if not await _is_bot_admin_in_group(message):
+        await message.answer(
+            "Bot to'liq ishlashi uchun admin qilib qo'shing.",
+        )
 
 
 @router.message(Command("help"))
@@ -3890,8 +4109,12 @@ async def admin_serial_media_handler(message: Message):
             "mode": "reply",
             "from_chat_id": message.chat.id,
             "reply_message_id": message.message_id,
+            "state": "await_attach",
         }
-        await message.answer("Kimlarga yuborilsin?", reply_markup=broadcast_target_keyboard())
+        await message.answer(
+            "Dramani biriktirasizmi?",
+            reply_markup=_broadcast_attach_keyboard(),
+        )
         return
     session = get_serial_session(message.from_user.id)
     if not session or session.get("state") != "await_part":
@@ -4096,7 +4319,7 @@ async def post_code_handler(message: Message):
         }
     )
     session["state"] = "await_media"
-    await message.answer("Rasm va caption yuboring.", reply_markup=post_media_keyboard())
+    await message.answer("Rasm yoki video va caption yuboring.", reply_markup=post_media_keyboard())
 
 
 @router.message(
@@ -4117,7 +4340,8 @@ async def post_caption_handler(message: Message):
     if not session:
         return
     session["caption"] = message.text.strip()
-    await message.answer("Rasm yuboring.", reply_markup=post_media_keyboard())
+    session["caption_entities"] = message.entities or []
+    await message.answer("Rasm yoki video yuboring.", reply_markup=post_media_keyboard())
 
 
 @router.message(
@@ -4208,7 +4432,7 @@ async def restore_db_callback(callback: CallbackQuery):
 
 
 @router.message(
-    F.photo | F.document,
+    F.photo | F.document | F.video,
     lambda message: (
         message
         and message.from_user
@@ -4226,10 +4450,11 @@ async def post_photo_handler(message: Message):
         return
     if message.document:
         mime_type = message.document.mime_type or ""
-        if not mime_type.startswith("image/"):
-            await message.answer("Faqat rasm yuboring.")
+        if not (mime_type.startswith("image/") or mime_type.startswith("video/")):
+            await message.answer("Faqat rasm yoki video yuboring.")
             return
     caption = message.caption or session.get("caption") or ""
+    caption_entities = message.caption_entities or session.get("caption_entities")
     if not caption.strip():
         await message.answer("Caption yuboring yoki avval matn yuboring.")
         return
@@ -4238,12 +4463,21 @@ async def post_photo_handler(message: Message):
         await message.answer("Bot linkini olishda xatolik.")
         return
     try:
-        if message.photo:
+        if message.video:
+            await message.bot.send_video(
+                chat_id=int(session["channel_id"]),
+                video=message.video.file_id,
+                caption=caption,
+                caption_entities=caption_entities,
+                reply_markup=post_link_keyboard(link),
+            )
+        elif message.photo:
             photo = message.photo[-1]
             await message.bot.send_photo(
                 chat_id=int(session["channel_id"]),
                 photo=photo.file_id,
                 caption=caption,
+                caption_entities=caption_entities,
                 reply_markup=post_link_keyboard(link),
             )
         else:
@@ -4251,6 +4485,7 @@ async def post_photo_handler(message: Message):
                 chat_id=int(session["channel_id"]),
                 document=message.document.file_id,
                 caption=caption,
+                caption_entities=caption_entities,
                 reply_markup=post_link_keyboard(link),
             )
     except Exception:
@@ -4330,12 +4565,22 @@ async def _send_serial_part(
         except ValueError:
             page = 0
     likes_count, dislikes_count = get_serial_rating_counts(serial_id)
+    part_link_prefix = None
+    if message.chat.type in {"group", "supergroup"} and serial:
+        part_link_prefix = await _get_start_link_with_payload(
+            message.bot,
+            f"{int(serial['code'])}_",
+        )
+    show_rating = message.chat.type not in {"group", "supergroup"}
     reply_markup = serial_parts_keyboard(
         serial_id,
         part_numbers_sorted or [part],
         page=page,
         per_page=SERIAL_PARTS_PER_PAGE,
         share_link=share_link,
+        part_link_prefix=part_link_prefix,
+        show_rating=show_rating,
+        notify_enabled=_is_serial_notify_enabled(message.from_user.id, serial_id),
         rating=get_serial_rating(message.from_user.id, serial_id),
         likes_count=likes_count,
         dislikes_count=dislikes_count,
@@ -4394,12 +4639,7 @@ async def movie_command_disabled(message: Message, command: CommandObject):
     await message.answer("Kino funksiyalari o'chirilgan.")
 
 
-@router.message(Command("serial"))
-async def serial_command_handler(message: Message, command: CommandObject):
-    if not command.args:
-        await message.answer("Foydalanish: /serial <drama_nomi|kod>")
-        return
-    raw = command.args.strip()
+async def _handle_serial_request(message: Message, raw: str) -> None:
     _log_event("serial_request", message.from_user.id, f"query={raw}")
     serial = None
     if raw.isdigit():
@@ -4415,8 +4655,52 @@ async def serial_command_handler(message: Message, command: CommandObject):
         await message.answer("Dramada qismlar yo'q.")
 
 
+@router.message(Command("serial"))
+async def serial_command_handler(message: Message, command: CommandObject):
+    if not command.args:
+        await message.answer("Foydalanish: /serial <drama_nomi|kod>")
+        return
+    raw = command.args.strip()
+    await _handle_serial_request(message, raw)
+
+
+@router.message(Command("drama"))
+async def drama_command_handler(message: Message, command: CommandObject):
+    if message.chat.type in {"group", "supergroup"}:
+        if await _maybe_restrict_group_spam(message):
+            return
+        if not await _is_bot_admin_in_group(message):
+            await message.answer("Botni admin qilib qo'shing.")
+            return
+    if not command.args:
+        await message.answer("Foydalanish: /drama <drama_nomi|kod>")
+        return
+    raw = command.args.strip()
+    await _handle_serial_request(message, raw)
+
+
 @router.message(F.text & ~F.text.startswith("/"))
 async def movie_text_handler(message: Message):
+    if message.chat.type in {"group", "supergroup"}:
+        return
+    session = BROADCAST_SESSIONS.get(message.from_user.id)
+    if session and session.get("state") == "await_serial_code":
+        raw = (message.text or "").strip()
+        code = _parse_code(raw)
+        if not code:
+            await message.answer("Kod faqat raqam bo'lishi kerak.")
+            return
+        serial = get_serial_by_code(int(code))
+        if not serial:
+            await message.answer("Drama topilmadi.")
+            return
+        session["serial_code"] = int(serial["code"])
+        session["state"] = "ready"
+        await message.answer(
+            "Kimlarga yuborilsin?",
+            reply_markup=broadcast_target_keyboard(),
+        )
+        return
     if not await ensure_subscribed(message):
         return
     if message.from_user.id in SERIAL_RENAME_SESSIONS:
@@ -4674,6 +4958,8 @@ async def movie_text_handler(message: Message):
 
 @router.message(Command("stats"))
 async def stats_handler(message: Message):
+    if message.chat.type in {"group", "supergroup"}:
+        return
     if not _has_perm(message.from_user.id, "can_view_stats"):
         await message.answer("Bu buyruq uchun ruxsat yo'q.")
         return
@@ -5070,6 +5356,8 @@ async def _broadcast_to_user_ids(
     text: Optional[str],
     from_chat_id: Optional[int] = None,
     reply_message_id: Optional[int] = None,
+    attach_link: Optional[str] = None,
+    attach_text: str = "Dramani ko'rish",
 ) -> tuple[int, int]:
     ok = 0
     failed = 0
@@ -5085,8 +5373,18 @@ async def _broadcast_to_user_ids(
                     message_id=reply_message_id,
                     protect_content=True,
                 )
+                if attach_link:
+                    await message.bot.send_message(
+                        chat_id=user_id,
+                        text=attach_text,
+                        reply_markup=post_link_keyboard(attach_link),
+                    )
             else:
-                await message.bot.send_message(chat_id=user_id, text=text or "")
+                await message.bot.send_message(
+                    chat_id=user_id,
+                    text=text or "",
+                    reply_markup=post_link_keyboard(attach_link) if attach_link else None,
+                )
             ok += 1
         except TelegramAPIError as exc:
             _log_event("broadcast_failed", message.from_user.id, f"user_id={user_id} error={exc}")
@@ -5107,6 +5405,10 @@ async def _broadcast_serial_notification(
     text: str,
 ) -> tuple[int, int]:
     prefs = get_serial_notification_map(serial_id)
+    serial = get_serial_by_id(serial_id)
+    link = None
+    if serial:
+        link = await _get_start_link(message.bot, int(serial["code"]))
     ok = 0
     failed = 0
     counter = 0
@@ -5116,12 +5418,7 @@ async def _broadcast_serial_notification(
             continue
         first_time = not pref.get("notified")
         send_text = text
-        reply_markup = None
-        if first_time:
-            send_text = (
-                f"{text}\n\nBu drama uchun bildirishnomalarni o'chirishni xohlaysizmi?"
-            )
-            reply_markup = _serial_notify_optout_keyboard(serial_id)
+        reply_markup = post_link_keyboard(link) if link else None
         try:
             await message.bot.send_message(
                 chat_id=user_id,
@@ -5179,14 +5476,16 @@ async def broadcast_handler(message: Message, command: CommandObject):
             "mode": "reply",
             "from_chat_id": message.chat.id,
             "reply_message_id": message.reply_to_message.message_id,
+            "state": "await_attach",
         }
     else:
         text = command.args.strip()
         BROADCAST_SESSIONS[message.from_user.id] = {
             "mode": "text",
             "text": text,
+            "state": "await_attach",
         }
-    await message.answer("Kimlarga yuborilsin?", reply_markup=broadcast_target_keyboard())
+    await message.answer("Dramani biriktirasizmi?", reply_markup=_broadcast_attach_keyboard())
 
 
 @router.message(Command("cancel"))
@@ -5219,8 +5518,9 @@ async def broadcast_text_handler(message: Message):
             "mode": "reply",
             "from_chat_id": message.chat.id,
             "reply_message_id": message.reply_to_message.message_id,
+            "state": "await_attach",
         }
-        await message.answer("Kimlarga yuborilsin?", reply_markup=broadcast_target_keyboard())
+        await message.answer("Dramani biriktirasizmi?", reply_markup=_broadcast_attach_keyboard())
         return
     text = (message.text or "").strip()
     if not text:
@@ -5230,8 +5530,35 @@ async def broadcast_text_handler(message: Message):
     BROADCAST_SESSIONS[message.from_user.id] = {
         "mode": "text",
         "text": text,
+        "state": "await_attach",
     }
-    await message.answer("Kimlarga yuborilsin?", reply_markup=broadcast_target_keyboard())
+    await message.answer("Dramani biriktirasizmi?", reply_markup=_broadcast_attach_keyboard())
+
+
+@router.callback_query(F.data.startswith("broadcastattach:"))
+async def broadcast_attach_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_broadcast"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    session = BROADCAST_SESSIONS.get(callback.from_user.id)
+    if not session:
+        await callback.answer("Sessiya topilmadi.", show_alert=True)
+        return
+    action = callback.data.split(":")[-1]
+    if action == "yes":
+        session["attach_serial"] = True
+        session["state"] = "await_serial_code"
+        await callback.message.edit_text("Drama kodini yuboring.")
+        return
+    if action == "no":
+        session["attach_serial"] = False
+        session["state"] = "ready"
+        await callback.message.edit_text(
+            "Kimlarga yuborilsin?",
+            reply_markup=broadcast_target_keyboard(),
+        )
+        return
+    await callback.answer("Xatolik.", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("broadcast:"))
@@ -5248,6 +5575,11 @@ async def broadcast_target_callback(callback: CallbackQuery):
     if not session:
         await callback.answer("Sessiya topilmadi.", show_alert=True)
         return
+    attach_link = None
+    if session.get("attach_serial"):
+        serial_code = session.get("serial_code")
+        if serial_code:
+            attach_link = await _get_start_link(callback.bot, int(serial_code))
     targets = _collect_broadcast_targets(action)
     if not targets:
         await callback.message.edit_text("Foydalanuvchilar topilmadi.", reply_markup=admin_back_keyboard())
@@ -5260,12 +5592,14 @@ async def broadcast_target_callback(callback: CallbackQuery):
             text=None,
             from_chat_id=session.get("from_chat_id"),
             reply_message_id=session.get("reply_message_id"),
+            attach_link=attach_link,
         )
     else:
         ok, failed = await _broadcast_to_user_ids(
             callback.message,
             targets,
             text=session.get("text"),
+            attach_link=attach_link,
         )
     BROADCAST_SESSIONS.pop(callback.from_user.id, None)
     await callback.message.edit_text(f"Yuborildi: {ok}, xatolik: {failed}")
@@ -5364,7 +5698,7 @@ async def new_part_broadcast_callback(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("serialnotify:"))
 async def serial_notify_callback(callback: CallbackQuery):
     parts = callback.data.split(":")
-    if len(parts) != 3:
+    if len(parts) < 3:
         await callback.answer("Xatolik.", show_alert=True)
         return
     action = parts[1]
@@ -5373,12 +5707,64 @@ async def serial_notify_callback(callback: CallbackQuery):
     except ValueError:
         await callback.answer("Xatolik.", show_alert=True)
         return
-    if action != "off":
+    if action == "info":
+        await callback.answer(
+            "Bildirishnomalar yoniq bo'lganda bu dramaga oid yangi qismlar, "
+            "yangiliklar va so'nggi yangiliklardan xabardor bolasiz.",
+            show_alert=True,
+        )
+        return
+    if action == "off":
+        set_serial_notification_muted(callback.from_user.id, serial_id, 1)
+        await callback.answer("Bildirishnomalar o'chirildi.")
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        return
+    if action != "toggle":
         await callback.answer("Xatolik.", show_alert=True)
         return
-    set_serial_notification_muted(callback.from_user.id, serial_id, 1)
-    await callback.answer("Bildirishnomalar o'chirildi.")
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
+    page = 0
+    if len(parts) >= 4 and parts[3].isdigit():
+        page = int(parts[3])
+    current = _is_serial_notify_enabled(callback.from_user.id, serial_id)
+    set_serial_notification_muted(callback.from_user.id, serial_id, 0 if not current else 1)
+    serial = get_serial_by_id(serial_id)
+    title = serial.get("title") if serial else "Drama"
+    status_text = "yondi" if not current else "o'chdi"
+    await callback.answer(f"{title} uchun bildirishnomalar {status_text}.")
+    if not serial:
+        return
+    serial_parts = get_serial_parts(serial_id)
+    if serial.get("is_vip") and not _is_admin_user(callback.from_user.id):
+        serial_parts = [
+            p for p in serial_parts if not _is_vip_part_expired(p.get("created_at"))
+        ]
+    part_numbers = [int(item["part"]) for item in serial_parts if item.get("part") is not None]
+    if not part_numbers:
+        return
+    likes_count, dislikes_count = get_serial_rating_counts(serial_id)
+    share_link = await _get_share_link(
+        callback.message.bot,
+        int(serial.get("code")),
+        serial.get("title") or "",
+        len(part_numbers),
+    )
+    reply_markup = serial_parts_keyboard(
+        serial_id,
+        part_numbers,
+        page=page,
+        per_page=SERIAL_PARTS_PER_PAGE,
+        share_link=share_link,
+        notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
+        rating=get_serial_rating(callback.from_user.id, serial_id),
+        likes_count=likes_count,
+        dislikes_count=dislikes_count,
+    )
+    await _safe_edit_reply_markup(
+        callback.message.bot,
+        callback.message.chat.id,
+        callback.message.message_id,
+        reply_markup,
+    )

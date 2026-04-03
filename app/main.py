@@ -4,7 +4,14 @@ import contextlib
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import (
+    BotCommand,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeChat,
+    BotCommandScopeDefault,
+    CallbackQuery,
+    Message,
+)
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from app.config import (
@@ -15,7 +22,8 @@ from app.config import (
     WEBAPP_HOST,
     WEBAPP_PORT,
 )
-from app.db import ensure_owner, init_db, is_blocked_user
+from app.config import OWNER_ID
+from app.db import ensure_owner, get_admins, init_db, is_blocked_user
 from app.handlers import _log_event, router, vip_reminder_loop, backup_schedule_loop, cache_cleanup_loop
 
 
@@ -83,6 +91,73 @@ async def on_startup(*_: object) -> None:
     ensure_owner()
 
 
+async def set_bot_commands(bot: Bot) -> None:
+    default_commands = [
+        BotCommand(command="start", description="Botni ishga tushirish"),
+        BotCommand(command="help", description="Yordam"),
+        BotCommand(command="serial", description="Drama yuborish"),
+        BotCommand(command="drama", description="Drama yuborish (guruh)"),
+    ]
+    admin_commands = [
+        BotCommand(command="start", description="Botni ishga tushirish"),
+        BotCommand(command="help", description="Yordam"),
+        BotCommand(command="admin", description="Admin panel"),
+        BotCommand(command="admins", description="Adminlar ro'yxati"),
+        BotCommand(command="addadmin", description="Admin qo'shish"),
+        BotCommand(command="deladmin", description="Admin chiqarish"),
+        BotCommand(command="editadmin", description="Admin tahrirlash"),
+        BotCommand(command="addchannel", description="Kanal qo'shish"),
+        BotCommand(command="delchannel", description="Kanalni chiqarish"),
+        BotCommand(command="channels", description="Kanallar ro'yxati"),
+        BotCommand(command="addserial", description="Drama qo'shish"),
+        BotCommand(command="serial", description="Drama yuborish"),
+        BotCommand(command="drama", description="Drama yuborish (guruh)"),
+        BotCommand(command="renameserial", description="Drama nomini o'zgartirish"),
+        BotCommand(command="delserial", description="Drama o'chirish"),
+        BotCommand(command="serialcancel", description="Drama qo'shishni bekor qilish"),
+        BotCommand(command="addpart", description="Qism qo'shish"),
+        BotCommand(command="delpart", description="Qism o'chirish"),
+        BotCommand(command="part", description="Qism yuborish"),
+        BotCommand(command="import", description="Drama import"),
+        BotCommand(command="importcancel", description="Importni bekor qilish"),
+        BotCommand(command="importstop", description="Importni to'xtatish"),
+        BotCommand(command="post", description="Kanalga post"),
+        BotCommand(command="broadcast", description="E'lon yuborish"),
+        BotCommand(command="usend", description="Userbot bilan yuborish"),
+        BotCommand(command="vip", description="VIP info"),
+        BotCommand(command="addvip", description="VIP qo'shish"),
+        BotCommand(command="delvip", description="VIP olib tashlash"),
+        BotCommand(command="viplist", description="VIP ro'yxati"),
+        BotCommand(command="vipprice", description="VIP narx"),
+        BotCommand(command="setvipprice", description="VIP narx belgilash"),
+        BotCommand(command="vipmsg", description="VIP xabarini o'zgartirish"),
+        BotCommand(command="vipcard", description="VIP rekvizit"),
+        BotCommand(command="stats", description="Statistika"),
+        BotCommand(command="log", description="Log ko'rish"),
+        BotCommand(command="logfile", description="Log fayli"),
+        BotCommand(command="backup", description="Backup olish"),
+        BotCommand(command="cleanup", description="Bo'sh dramalarni tozalash"),
+        BotCommand(command="cancel", description="Bekor qilish"),
+    ]
+    group_commands = [
+        BotCommand(command="start", description="Botni ishga tushirish"),
+        BotCommand(command="drama", description="Drama yuborish"),
+    ]
+    try:
+        await bot.set_my_commands(default_commands, scope=BotCommandScopeDefault())
+        await bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())
+        admin_ids = set(get_admins())
+        if OWNER_ID:
+            admin_ids.add(OWNER_ID)
+        for admin_id in admin_ids:
+            await bot.set_my_commands(
+                admin_commands,
+                scope=BotCommandScopeChat(chat_id=int(admin_id)),
+            )
+    except Exception:
+        pass
+
+
 def run_webapp(bot: Bot, dp: Dispatcher) -> None:
     app = web.Application()
     app.router.add_get("/", _home)
@@ -144,6 +219,7 @@ def main() -> None:
         dp["cache_task"] = asyncio.create_task(cache_cleanup_loop())
 
     dp.startup.register(start_reminders)
+    dp.startup.register(set_bot_commands)
 
     if WEBAPP_ENABLED or WEBHOOK_URL:
         run_webapp(bot, dp)

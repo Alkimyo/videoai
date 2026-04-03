@@ -16169,3 +16169,336 @@
 2026-03-06T12:23:42.807189 serial_part_added user_id=6499839380 serial_id=3 part=9 message_id=15308
 2026-03-06T12:23:48.946072 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=newpart:all:3:9 message_id=15309
 2026-03-06T12:23:50.167611 broadcast_new_part user_id=6499839380 serial_id=3 part=9 target=all ok=2 failed=0
+2026-04-03T04:02:52.506925 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15409 text=/admin
+2026-04-03T04:02:54.654074 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:stats message_id=15410
+2026-04-03T04:02:57.316815 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:back message_id=15410
+2026-04-03T04:03:06.530289 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15411 text=/restoredb
+2026-04-03T04:03:06.666575 restore_db_start user_id=6499839380
+2026-04-03T04:03:28.459128 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.DOCUMENT message_id=15413 text=Backup
+2026-04-03T04:03:32.983954 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=restoredb:confirm message_id=15414
+2026-04-03T04:03:33.132217 restore_db_success user_id=6499839380 backup=/tmp/serialbot-db-backup-20260403-040332.db
+2026-04-03T04:03:43.488620 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15415 text=254
+2026-04-03T04:03:43.488967 serial_request user_id=6499839380 query=254
+2026-04-03T04:03:46.717070 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15417 text=255
+2026-04-03T04:03:46.717457 serial_request user_id=6499839380 query=255
+2026-04-03T04:04:37.696611 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15420 text=/admin
+2026-04-03T04:04:43.669723 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:addchannel message_id=15421
+2026-04-03T04:05:00.844827 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15422 text=/addchannel @KOREA_VIDEOLAR
+2026-04-03T04:06:57.807069 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15424 text=/addchannel @KOREA_VIDEOLAR
+2026-04-03T04:06:58.227508 channel_added user_id=6499839380 chat_id=-1001972792685
+2026-04-03T04:08:06.229177 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15426 text=255
+2026-04-03T04:08:06.229730 serial_request user_id=6499839380 query=255
+2026-04-03T04:08:25.321093 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.TEXT message_id=15428 text=/start 255
+2026-04-03T04:08:25.322925 user_start user_id=5792951787
+2026-04-03T04:08:31.003493 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.TEXT message_id=15430 text=/admin
+2026-04-03T04:08:33.063443 user_action user_id=5792951787 chat_id=5792951787 username=humble_student1 data=admin:channels message_id=15431
+2026-04-03T04:10:23.571287 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15432 text=/admin
+2026-04-03T04:10:26.457761 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:channels message_id=15433
+2026-04-03T04:11:14.727796 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15434 text=/admin
+2026-04-03T04:11:20.466099 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:editadmin message_id=15435
+2026-04-03T04:11:23.549816 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:edit:5792951787 message_id=15435
+2026-04-03T04:11:23.551956 admin_edit_start user_id=6499839380 target_id=5792951787
+2026-04-03T04:11:29.263412 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=perm:cancel message_id=15435
+2026-04-03T04:11:29.263741 admin_add_cancel user_id=6499839380 target_id=5792951787
+2026-04-03T04:11:31.743952 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:back message_id=15435
+2026-04-03T04:11:35.611638 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:deladmin message_id=15435
+2026-04-03T04:11:57.285749 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15436 text=/deladmin 5792951787
+2026-04-03T04:11:57.299510 admin_deleted user_id=6499839380 target_id=5792951787
+2026-04-03T04:12:10.180896 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.TEXT message_id=15438 text=/start 255
+2026-04-03T04:12:10.182492 user_start user_id=5792951787
+2026-04-03T04:12:17.962883 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.TEXT message_id=15440 text=/admin
+2026-04-03T04:13:29.928323 user_action user_id=5792951787 chat_id=5792951787 username=humble_student1 data=user:rate:-1:517 message_id=15429
+2026-04-03T04:13:40.279413 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15442 text=/channels
+2026-04-03T04:13:40.405743 channels_list user_id=6499839380
+2026-04-03T04:14:36.416807 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15445 text=/admin
+2026-04-03T04:14:38.888791 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:viplist message_id=15446
+2026-04-03T04:14:43.219692 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:back message_id=15447
+2026-04-03T04:16:25.819561 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15448 text=/start
+2026-04-03T04:16:25.841720 user_start user_id=8060549994
+2026-04-03T04:17:01.459828 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15449
+2026-04-03T04:17:49.192997 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15449
+2026-04-03T04:18:40.994671 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15449
+2026-04-03T04:19:29.550044 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15449
+2026-04-03T04:19:43.056434 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15450 text=/start
+2026-04-03T04:19:43.057965 user_start user_id=8060549994
+2026-04-03T04:19:49.607596 user_action user_id=8060549994 chat_id=8060549994 username= data=user:toplikes message_id=15451
+2026-04-03T04:20:38.778177 user_action user_id=8060549994 chat_id=8060549994 username= data=user:serial:500 message_id=15451
+2026-04-03T04:21:40.636646 user_action user_id=8060549994 chat_id=8060549994 username= data=user:rate:1:500 message_id=15452
+2026-04-03T04:22:00.265934 user_action user_id=8060549994 chat_id=8060549994 username= data=user:rate:1:500 message_id=15452
+2026-04-03T04:22:13.702522 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15453 text=/start
+2026-04-03T04:22:13.703773 user_start user_id=8060549994
+2026-04-03T04:22:22.382970 edit_markup_error user_id=- chat_id=8060549994 message_id=15452
+2026-04-03T04:22:26.290166 user_action user_id=8060549994 chat_id=8060549994 username= data=user:serials message_id=15454
+2026-04-03T04:22:33.719801 user_action user_id=8060549994 chat_id=8060549994 username= data=user:serial:300 message_id=15454
+2026-04-03T04:23:27.145090 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15456 text=https://t.me/dramalaruzbekbot?start=255
+2026-04-03T04:23:30.790397 serial_request user_id=8060549994 query=https://t.me/dramalaruzbekbot?start=255
+2026-04-03T04:23:55.111386 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15458 text=/start 255
+2026-04-03T04:23:55.112842 user_start user_id=8060549994
+2026-04-03T04:24:15.229524 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15460 text=/start 255
+2026-04-03T04:24:15.231074 user_start user_id=8060549994
+2026-04-03T04:27:16.155471 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15463 text=/start
+2026-04-03T04:27:16.157286 user_start user_id=8060549994
+2026-04-03T04:27:24.260595 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15464 text=/start
+2026-04-03T04:27:24.262327 user_start user_id=8060549994
+2026-04-03T04:33:25.039999 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15467 text=/start
+2026-04-03T04:33:25.041391 user_start user_id=8060549994
+2026-04-03T04:33:25.049639 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15468 text=/admin
+2026-04-03T04:33:25.075018 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15469 text=/start
+2026-04-03T04:33:25.076696 user_start user_id=8060549994
+2026-04-03T04:33:25.094263 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15471 text=/start
+2026-04-03T04:33:25.095694 user_start user_id=6499839380
+2026-04-03T04:33:25.101569 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15472 text=/start
+2026-04-03T04:33:25.103100 user_start user_id=8060549994
+2026-04-03T04:33:25.123716 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15470 text=255
+2026-04-03T04:33:36.937721 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15478
+2026-04-03T04:33:44.105401 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15478
+2026-04-03T04:35:05.010232 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15479 text=55
+2026-04-03T04:35:05.386353 serial_request user_id=8060549994 query=55
+2026-04-03T04:35:08.138489 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15481 text=45
+2026-04-03T04:35:08.536217 serial_request user_id=8060549994 query=45
+2026-04-03T04:36:09.721034 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15483 text=/start 255
+2026-04-03T04:36:09.722580 user_start user_id=8060549994
+2026-04-03T04:36:17.502797 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15484
+2026-04-03T04:36:36.216563 user_action user_id=8060549994 chat_id=8060549994 username= data=user:rate:1:517 message_id=15486
+2026-04-03T04:37:23.020775 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15487 text=/start 255
+2026-04-03T04:37:23.022522 user_start user_id=8060549994
+2026-04-03T04:38:37.169794 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15490 text=/start 255
+2026-04-03T04:38:37.171521 user_start user_id=8060549994
+2026-04-03T04:38:43.312652 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15491
+2026-04-03T04:38:49.033077 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15491
+2026-04-03T04:38:55.995720 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15492 text=/start
+2026-04-03T04:38:55.997558 user_start user_id=8060549994
+2026-04-03T04:39:08.282282 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15494 text=/start
+2026-04-03T04:39:08.284015 user_start user_id=8060549994
+2026-04-03T04:39:14.427189 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15495
+2026-04-03T04:39:19.956142 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15495
+2026-04-03T04:39:53.950941 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15497 text=/start 255
+2026-04-03T04:39:53.952561 user_start user_id=8060549994
+2026-04-03T04:40:09.923755 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15499 text=/start 255
+2026-04-03T04:40:09.925207 user_start user_id=8060549994
+2026-04-03T04:40:12.382489 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15500
+2026-04-03T04:40:21.395880 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15500
+2026-04-03T04:50:30.799121 user_message user_id=8060549994 chat_id=-5252186447 chat_type=group username= msg_type=ContentType.TEXT message_id=15503 text=/drama sichqon
+2026-04-03T04:50:30.799591 serial_request user_id=8060549994 query=sichqon
+2026-04-03T04:51:11.955159 user_action user_id=8060549994 chat_id=-5252186447 username= data=check_subs message_id=15504
+2026-04-03T04:51:15.641868 user_action user_id=8060549994 chat_id=-5252186447 username= data=check_subs message_id=15504
+2026-04-03T04:51:42.516269 user_message user_id=8060549994 chat_id=-5252186447 chat_type=group username= msg_type=ContentType.TEXT message_id=15505 text=/drama sichqon
+2026-04-03T04:51:42.516651 serial_request user_id=8060549994 query=sichqon
+2026-04-03T04:51:48.003443 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15507 text=/start 238_2
+2026-04-03T04:51:48.005842 user_start user_id=8060549994
+2026-04-03T04:53:13.052884 user_message user_id=8060549994 chat_id=-5252186447 chat_type=group username= msg_type=ContentType.TEXT message_id=15509 text=/drama sichqon
+2026-04-03T04:53:13.053265 serial_request user_id=8060549994 query=sichqon
+2026-04-03T04:55:53.009987 user_message user_id=8060549994 chat_id=-5252186447 chat_type=group username= msg_type=ContentType.TEXT message_id=15511 text=/drama sichqon
+2026-04-03T04:55:53.010420 serial_request user_id=8060549994 query=sichqon
+2026-04-03T04:55:57.937834 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15513 text=/start 238_4
+2026-04-03T04:55:57.940828 user_start user_id=8060549994
+2026-04-03T04:56:07.917006 user_action user_id=8060549994 chat_id=8060549994 username= data=check_subs message_id=15514
+2026-04-03T04:56:22.266371 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15516 text=Notanish doktor
+2026-04-03T04:56:22.865825 serial_request user_id=8060549994 query=Notanish doktor
+2026-04-03T04:56:26.972050 user_action user_id=8060549994 chat_id=8060549994 username= data=serialpage:390:1 message_id=15517
+2026-04-03T05:00:05.929557 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15519 text=/start 238_7
+2026-04-03T05:00:05.931069 user_start user_id=8060549994
+2026-04-03T05:00:16.467623 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15521 text=/start
+2026-04-03T05:00:16.469599 user_start user_id=8060549994
+2026-04-03T05:04:21.654526 user_action user_id=8060549994 chat_id=8060549994 username= data=user:vipinfo message_id=15522
+2026-04-03T05:04:23.844422 user_action user_id=8060549994 chat_id=8060549994 username= data=vipjoin:cancel message_id=15524
+2026-04-03T05:04:31.669601 user_action user_id=8060549994 chat_id=8060549994 username= data=user:search message_id=15522
+2026-04-03T05:04:37.003076 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15526 text=Samo
+2026-04-03T05:04:39.879071 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15528 text=🎬 SAMO MUHOFIZLARI 🎬
+2026-04-03T05:04:44.169593 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15530 text=🎬 SAMOVIY IDOL 🎬
+2026-04-03T05:09:06.769784 user_action user_id=8060549994 chat_id=8060549994 username= data=serialpart:394:9 message_id=15531
+2026-04-03T05:09:07.570714 serial_part_sent user_id=8060549994 serial_id=394 part=9
+2026-04-03T05:11:38.634799 user_message user_id=5792951787 chat_id=-5252186447 chat_type=group username=humble_student1 msg_type=ContentType.TEXT message_id=15533 text=/drama samo muhofizlari
+2026-04-03T05:11:38.635349 serial_request user_id=5792951787 query=samo muhofizlari
+2026-04-03T05:11:59.717190 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.TEXT message_id=15535 text=/start 255_1
+2026-04-03T05:11:59.720971 user_start user_id=5792951787
+2026-04-03T05:13:57.069949 user_message user_id=8060549994 chat_id=-5252186447 chat_type=group username= msg_type=ContentType.TEXT message_id=15537 text=/drama bahoriy hislar
+2026-04-03T05:13:57.070351 serial_request user_id=8060549994 query=bahoriy hislar
+2026-04-03T05:16:16.799152 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15539 text=/start 1_2
+2026-04-03T05:16:16.800713 user_start user_id=8060549994
+2026-04-03T05:16:20.587251 user_action user_id=8060549994 chat_id=8060549994 username= data=serialnotify:toggle:1:0 message_id=15540
+2026-04-03T05:16:25.002964 user_action user_id=8060549994 chat_id=8060549994 username= data=serialnotify:toggle:1:0 message_id=15540
+2026-04-03T05:16:28.193658 user_action user_id=8060549994 chat_id=8060549994 username= data=serialnotify:info:1 message_id=15540
+2026-04-03T05:18:20.834265 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15541 text=/start 1_8
+2026-04-03T05:18:20.838038 user_start user_id=6499839380
+2026-04-03T05:18:25.762702 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15543 text=/admin
+2026-04-03T05:18:31.922207 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15545 text=/broadcast
+2026-04-03T05:18:49.542720 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.VIDEO message_id=15547 text=Song Joong-ki ishtirokidagi ajoyib kino premyerasi❤️‍🔥🔥💣 ( bu aktyorimizni Quyosh avlodlarida bosh rol bilan taniymiz) TOMOSHA QILISH UCHUN  Kodi: 255  #by_yujin
+2026-04-03T05:18:57.116443 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15548 text=/broadcast
+2026-04-03T05:19:21.119600 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15549 text=/broadcast hello vip
+2026-04-03T05:19:24.027625 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=broadcastattach:no message_id=15550
+2026-04-03T05:19:26.644929 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=broadcast:vip message_id=15550
+2026-04-03T05:19:27.403631 broadcast user_id=6499839380 target=vip ok=2 failed=0
+2026-04-03T05:19:47.604364 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15553 text=/broadcast hello vip yangi drama qoshildi
+2026-04-03T05:19:49.997252 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=broadcastattach:yes message_id=15554
+2026-04-03T05:19:53.466396 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15555 text=238
+2026-04-03T05:19:56.139079 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=broadcast:vip message_id=15556
+2026-04-03T05:19:56.801652 broadcast user_id=6499839380 target=vip ok=2 failed=0
+2026-04-03T05:20:01.447627 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15559 text=/start 238
+2026-04-03T05:20:01.450049 user_start user_id=6499839380
+2026-04-03T05:20:05.524736 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=serialnotify:toggle:500:0 message_id=15560
+2026-04-03T05:20:11.643904 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=serialnotify:info:500 message_id=15560
+2026-04-03T05:20:38.733193 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15561 text=/post
+2026-04-03T05:20:38.890705 post_start user_id=6499839380
+2026-04-03T05:21:12.331576 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15563 text=/addchannel -1003861759494
+2026-04-03T05:21:13.368312 channel_added user_id=6499839380 chat_id=-1003861759494
+2026-04-03T05:21:17.045021 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15565 text=/post
+2026-04-03T05:21:17.207121 post_start user_id=6499839380
+2026-04-03T05:21:20.146927 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=post:channel:-1003861759494 message_id=15566
+2026-04-03T05:21:27.016393 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15567 text=238
+2026-04-03T05:22:10.132124 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15571 text=/post
+2026-04-03T05:22:10.828379 post_start user_id=6499839380
+2026-04-03T05:22:14.019389 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=post:channel:-1003861759494 message_id=15572
+2026-04-03T05:22:18.515826 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15573 text=255
+2026-04-03T05:22:24.264619 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.VIDEO message_id=15575 text=Song Joong-ki ishtirokidagi ajoyib kino premyerasi❤️‍🔥🔥💣 ( bu aktyorimizni Quyosh avlodlarida bosh rol bilan taniymiz) TOMOSHA QILISH UCHUN  Kodi: 255  #by_yujin
+2026-04-03T05:22:24.824660 post_created user_id=6499839380 serial_id=517 channel_id=-1003861759494
+2026-04-03T05:22:36.732664 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15577 text=/start 255
+2026-04-03T05:22:36.735420 user_start user_id=6499839380
+2026-04-03T05:23:01.722647 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15579 text=/start
+2026-04-03T05:23:01.724409 user_start user_id=8060549994
+2026-04-03T05:23:08.687112 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15581 text=/start
+2026-04-03T05:23:08.688764 user_start user_id=8060549994
+2026-04-03T05:27:44.801724 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15584 text=/serial
+2026-04-03T05:27:46.328373 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15586 text=/admin
+2026-04-03T05:27:50.935314 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15588 text=/start
+2026-04-03T05:27:50.936830 user_start user_id=8060549994
+2026-04-03T05:27:58.923162 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15591 text=🎬 SAMOVIY IDOL 🎬
+2026-04-03T05:28:01.805510 serial_request user_id=8060549994 query=🎬 SAMOVIY IDOL 🎬
+2026-04-03T05:28:06.463031 user_action user_id=8060549994 chat_id=8060549994 username= data=user:toplikes message_id=15589
+2026-04-03T05:28:10.230606 user_action user_id=8060549994 chat_id=8060549994 username= data=user:serial:298 message_id=15589
+2026-04-03T05:28:18.348279 user_action user_id=8060549994 chat_id=8060549994 username= data=user:rate:1:298 message_id=15593
+2026-04-03T05:29:03.270556 user_message user_id=8060549994 chat_id=-5252186447 chat_type=group username= msg_type=ContentType.TEXT message_id=15594 text=/serial
+2026-04-03T05:29:09.800530 user_message user_id=8060549994 chat_id=-5252186447 chat_type=group username= msg_type=ContentType.TEXT message_id=15596 text=/start
+2026-04-03T05:29:09.802761 user_start user_id=8060549994
+2026-04-03T05:29:16.361759 user_message user_id=8060549994 chat_id=-5252186447 chat_type=group username= msg_type=ContentType.TEXT message_id=15599 text=/help
+2026-04-03T05:29:16.490496 admins_list user_id=8060549994
+2026-04-03T05:30:30.495739 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15601 text=/start
+2026-04-03T05:30:30.497482 user_start user_id=8060549994
+2026-04-03T05:30:43.607460 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15604 text=/start
+2026-04-03T05:30:43.609832 user_start user_id=6499839380
+2026-04-03T05:30:49.544139 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15607 text=/help
+2026-04-03T05:30:49.700953 admins_list user_id=6499839380
+2026-04-03T05:31:20.453762 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15609 text=/start
+2026-04-03T05:31:20.455558 user_start user_id=6499839380
+2026-04-03T05:31:28.516020 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=428 text=/start@dramalaruzbek_bot 1
+2026-04-03T05:31:28.534816 user_start user_id=1087968824
+2026-04-03T05:32:06.160625 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=431 text=/drama sichqon
+2026-04-03T05:32:06.161089 serial_request user_id=1087968824 query=sichqon
+2026-04-03T05:32:15.772956 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15612 text=/start 238_7
+2026-04-03T05:32:15.775796 user_start user_id=6499839380
+2026-04-03T05:34:16.000569 user_message user_id=7783967083 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=434 text=/start@dramalaruzbek_bot
+2026-04-03T05:34:16.037968 user_start user_id=7783967083
+2026-04-03T05:38:01.802495 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15614 text=/start
+2026-04-03T05:38:01.804862 user_start user_id=6499839380
+2026-04-03T05:38:08.440877 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=439 text=/start@dramalaruzbek_bot 1
+2026-04-03T05:38:08.442412 user_start user_id=1087968824
+2026-04-03T05:38:08.482526 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.NEW_CHAT_MEMBERS message_id=438 text=
+2026-04-03T05:38:58.833108 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=442 text=/drama 230
+2026-04-03T05:38:59.275316 serial_request user_id=1087968824 query=230
+2026-04-03T05:40:44.036637 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=444 text=/start@dramalaruzbek_bot
+2026-04-03T05:40:44.038263 user_start user_id=1087968824
+2026-04-03T05:40:47.774736 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:toplikes message_id=445
+2026-04-03T05:40:58.773187 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:serial:486 message_id=445
+2026-04-03T05:41:04.975496 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15617 text=/start 225_8
+2026-04-03T05:41:04.977520 user_start user_id=6499839380
+2026-04-03T05:41:16.856279 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=447 text=/start@dramalaruzbek_bot
+2026-04-03T05:41:16.858192 user_start user_id=1087968824
+2026-04-03T05:41:20.746618 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:search message_id=448
+2026-04-03T05:41:25.271752 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=450 text=samo
+2026-04-03T05:41:25.274739 serial_request user_id=1087968824 query=samo
+2026-04-03T05:41:33.850998 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=452 text=/start@dramalaruzbek_bot
+2026-04-03T05:41:33.852826 user_start user_id=1087968824
+2026-04-03T05:41:38.359748 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:serials message_id=453
+2026-04-03T05:41:41.652901 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:serials:az:1 message_id=453
+2026-04-03T05:41:43.484283 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:serials:az:2 message_id=453
+2026-04-03T05:41:45.122244 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:serials:az:3 message_id=453
+2026-04-03T05:41:46.596757 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:serials:az:4 message_id=453
+2026-04-03T05:41:48.193636 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:serials:az:5 message_id=453
+2026-04-03T05:42:08.066460 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=454 text=/stats@dramalaruzbek_bot
+2026-04-03T05:42:36.522490 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=456 text=/start@dramalaruzbek_bot
+2026-04-03T05:42:36.525191 user_start user_id=1087968824
+2026-04-03T05:42:40.918350 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:search message_id=457
+2026-04-03T05:42:52.110220 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=459 text=Bekor
+2026-04-03T05:42:52.113821 serial_request user_id=1087968824 query=Bekor
+2026-04-03T05:43:04.786155 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:search message_id=457
+2026-04-03T05:43:07.259453 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=462 text=adovat
+2026-04-03T05:43:07.261934 serial_request user_id=1087968824 query=adovat
+2026-04-03T05:43:17.515969 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=464 text=/start@dramalaruzbek_bot
+2026-04-03T05:43:17.517590 user_start user_id=1087968824
+2026-04-03T05:43:20.556164 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:toplikes message_id=465
+2026-04-03T05:44:17.694769 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=466 text=/admin@dramalaruzbek_bot
+2026-04-03T05:45:26.001067 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=468 text=/help@dramalaruzbek_bot
+2026-04-03T05:45:26.182601 admins_list user_id=1087968824
+2026-04-03T05:45:39.344927 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15619 text=/help
+2026-04-03T05:45:39.525052 admins_list user_id=6499839380
+2026-04-03T05:45:55.249133 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15621 text=/help
+2026-04-03T05:45:56.154806 admins_list user_id=8060549994
+2026-04-03T05:46:04.402686 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15623 text=/serial 1
+2026-04-03T05:46:04.403066 serial_request user_id=8060549994 query=1
+2026-04-03T05:46:09.737793 user_action user_id=8060549994 chat_id=8060549994 username= data=user:rate:1:1 message_id=15624
+2026-04-03T05:46:13.003757 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15625 text=/vip
+2026-04-03T05:46:16.477931 user_action user_id=8060549994 chat_id=8060549994 username= data=vipjoin:cancel message_id=15626
+2026-04-03T05:46:20.966378 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15627 text=/help
+2026-04-03T05:46:21.796172 admins_list user_id=8060549994
+2026-04-03T05:46:47.617302 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15629 text=/drama
+2026-04-03T05:47:14.856533 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=470 text=/start@dramalaruzbek_bot
+2026-04-03T05:47:14.858121 user_start user_id=1087968824
+2026-04-03T05:47:43.394018 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.NEW_CHAT_MEMBERS message_id=472 text=
+2026-04-03T05:48:03.811191 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.TEXT message_id=473 text=/drama@dramalaruzbek_bot
+2026-04-03T05:48:09.549100 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.TEXT message_id=475 text=samo
+2026-04-03T05:48:09.551681 serial_request user_id=5792951787 query=samo
+2026-04-03T05:48:17.732434 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.TEXT message_id=477 text=/drama adovat
+2026-04-03T05:48:18.158078 serial_request user_id=5792951787 query=adovat
+2026-04-03T05:48:28.983349 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.TEXT message_id=479 text=/start
+2026-04-03T05:48:28.985163 user_start user_id=5792951787
+2026-04-03T05:49:14.445743 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.TEXT message_id=481 text=/start
+2026-04-03T05:49:14.447094 user_start user_id=5792951787
+2026-04-03T05:49:42.102156 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.TEXT message_id=483 text=/start
+2026-04-03T05:49:42.103801 user_start user_id=5792951787
+2026-04-03T05:49:52.148016 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.TEXT message_id=485 text=/drama@dramalaruzbek_bot
+2026-04-03T05:50:11.589933 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.TEXT message_id=487 text=/start@dramalaruzbek_bot
+2026-04-03T05:50:11.592109 user_start user_id=5792951787
+2026-04-03T05:50:31.068804 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.TEXT message_id=489 text=/start@dramalaruzbek_bot
+2026-04-03T05:50:31.070742 user_start user_id=5792951787
+2026-04-03T05:51:08.322788 user_message user_id=5792951787 chat_id=-1003473985730 chat_type=supergroup username=humble_student1 msg_type=ContentType.TEXT message_id=491 text=/start
+2026-04-03T05:51:08.326131 user_start user_id=5792951787
+2026-04-03T05:52:15.701389 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=493 text=/start@dramalaruzbek_bot
+2026-04-03T05:52:15.703365 user_start user_id=1087968824
+2026-04-03T05:53:33.119075 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15631 text=/start
+2026-04-03T05:53:33.122125 user_start user_id=6499839380
+2026-04-03T05:53:38.444113 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=497 text=/start@dramalaruzbek_bot 1
+2026-04-03T05:53:38.446179 user_start user_id=1087968824
+2026-04-03T05:53:38.450316 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.NEW_CHAT_MEMBERS message_id=496 text=
+2026-04-03T05:53:51.548362 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=500 text=/start@dramalaruzbek_bot
+2026-04-03T05:53:51.551145 user_start user_id=1087968824
+2026-04-03T05:56:23.938683 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=502 text=/start@dramalaruzbek_bot
+2026-04-03T05:56:23.940482 user_start user_id=1087968824
+2026-04-03T05:56:28.639582 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:serials message_id=503
+2026-04-03T05:56:31.586177 user_action user_id=6499839380 chat_id=-1003473985730 username=By_yujin data=user:serial:415 message_id=503
+2026-04-03T05:56:38.876292 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15634 text=/start 155_12
+2026-04-03T05:56:38.879404 user_start user_id=6499839380
+2026-04-03T05:58:07.969782 user_message user_id=8060549994 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.NEW_CHAT_MEMBERS message_id=505 text=
+2026-04-03T05:58:13.087361 user_message user_id=8060549994 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=506 text=/start@dramalaruzbek_bot
+2026-04-03T05:58:13.089055 user_start user_id=8060549994
+2026-04-03T05:58:16.570787 user_action user_id=8060549994 chat_id=-1003473985730 username= data=user:toplikes message_id=507
+2026-04-03T05:58:19.678823 user_action user_id=8060549994 chat_id=-1003473985730 username= data=user:serial:16 message_id=507
+2026-04-03T05:58:23.529965 user_message user_id=8060549994 chat_id=8060549994 chat_type=private username= msg_type=ContentType.TEXT message_id=15636 text=/start 13_9
+2026-04-03T05:58:23.531658 user_start user_id=8060549994
+2026-04-03T05:58:30.527024 user_message user_id=8554211484 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=509 text=Uf ezarkansilada endi
+2026-04-03T05:58:30.531968 serial_request user_id=8554211484 query=Uf ezarkansilada endi
+2026-04-03T05:59:02.255999 user_message user_id=8060549994 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=511 text=Ey
+2026-04-03T05:59:02.258161 serial_request user_id=8060549994 query=Ey
+2026-04-03T05:59:52.223145 user_message user_id=8060549994 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=513 text=5f 5dv5ffv6
+2026-04-03T05:59:52.226390 serial_request user_id=8060549994 query=5f 5dv5ffv6
+2026-04-03T06:00:17.645085 user_message user_id=8060549994 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=515 text=Crtvtv
+2026-04-03T06:00:21.104735 user_message user_id=8060549994 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=516 text=Gtbt
+2026-04-03T06:00:24.367546 user_message user_id=8060549994 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=517 text=/start@dramalaruzbek_bot
+2026-04-03T06:00:24.369266 user_start user_id=8060549994
+2026-04-03T06:00:28.669064 user_action user_id=8060549994 chat_id=-1003473985730 username= data=user:serials message_id=518
+2026-04-03T06:00:34.215066 user_action user_id=8060549994 chat_id=-1003473985730 username= data=user:serial:305 message_id=518
+2026-04-03T06:01:31.767111 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=520 text=test qilinayapti yangi funksiya qoshilayapti
+2026-04-03T06:04:31.123107 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15638 text=/restoredb
+2026-04-03T06:04:31.270018 restore_db_start user_id=6499839380
+2026-04-03T06:04:48.370292 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.DOCUMENT message_id=15640 text=Backup
+2026-04-03T06:04:52.888501 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=restoredb:confirm message_id=15641
+2026-04-03T06:04:53.066059 restore_db_success user_id=6499839380 backup=/tmp/serialbot-db-backup-20260403-060452.db

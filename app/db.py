@@ -1099,6 +1099,25 @@ def get_serial_notification_map(serial_id: int) -> Dict[int, Dict[str, int]]:
         }
 
 
+def get_serial_notification(user_id: int, serial_id: int) -> Optional[Dict[str, int]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT muted, notified
+            FROM serial_notifications
+            WHERE user_id = ? AND serial_id = ?
+            """,
+            (int(user_id), int(serial_id)),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "muted": int(row["muted"]),
+            "notified": int(row["notified"]),
+        }
+
+
 def mark_serial_notification_sent(user_id: int, serial_id: int) -> None:
     with _connect() as conn:
         conn.execute(

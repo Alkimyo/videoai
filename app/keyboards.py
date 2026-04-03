@@ -131,6 +131,9 @@ def serial_parts_keyboard(
     page: int,
     per_page: int,
     share_link: Optional[str] = None,
+    part_link_prefix: Optional[str] = None,
+    show_rating: bool = True,
+    notify_enabled: bool = True,
     rating: int = 0,
     likes_count: int = 0,
     dislikes_count: int = 0,
@@ -141,41 +144,63 @@ def serial_parts_keyboard(
     end = start + per_page
     page_parts = parts_list[start:end]
     for part in page_parts:
-        kb.button(
-            text=str(part),
-            callback_data=f"serialpart:{serial_id}:{part}",
-        )
+        if part_link_prefix:
+            kb.button(text=str(part), url=f"{part_link_prefix}{part}")
+        else:
+            kb.button(
+                text=str(part),
+                callback_data=f"serialpart:{serial_id}:{part}",
+            )
     kb.adjust(5)
-    nav_buttons = []
-    if page > 0:
-        nav_buttons.append(
+    if len(parts_list) > per_page:
+        nav_buttons = []
+        if page > 0:
+            nav_buttons.append(
+                InlineKeyboardButton(
+                    text="<",
+                    callback_data=f"serialpage:{serial_id}:{page - 1}",
+                )
+            )
+        nav_buttons.append(InlineKeyboardButton(text=f"{page + 1}", callback_data="noop"))
+        if end < len(parts_list):
+            nav_buttons.append(
+                InlineKeyboardButton(
+                    text=">",
+                    callback_data=f"serialpage:{serial_id}:{page + 1}",
+                )
+            )
+        if nav_buttons:
+            kb.row(*nav_buttons)
+    if show_rating:
+        if likes_count < 0:
+            likes_count = 0
+        if likes_count < 0:
+            likes_count = 0
+        if dislikes_count < 0:
+            dislikes_count = 0
+        like_label = "👍✅" if rating == 1 else "👍"
+        dislike_label = "👎✅" if rating == -1 else "👎"
+        notify_label = "🔔" if notify_enabled else "🔕"
+        kb.row(
             InlineKeyboardButton(
-                text="<",
-                callback_data=f"serialpage:{serial_id}:{page - 1}",
+                text=f"{like_label} {likes_count}",
+                callback_data=f"user:rate:1:{serial_id}",
+            ),
+            InlineKeyboardButton(
+                text=notify_label,
+                callback_data=f"serialnotify:toggle:{serial_id}:{page}",
+            ),
+            InlineKeyboardButton(
+                text=f"{dislike_label} {dislikes_count}",
+                callback_data=f"user:rate:-1:{serial_id}",
+            ),
+        )
+        kb.row(
+            InlineKeyboardButton(
+                text="Nima uchun kerak?",
+                callback_data=f"serialnotify:info:{serial_id}",
             )
         )
-    nav_buttons.append(InlineKeyboardButton(text=f"{page + 1}", callback_data="noop"))
-    if end < len(parts_list):
-        nav_buttons.append(
-            InlineKeyboardButton(
-                text=">",
-                callback_data=f"serialpage:{serial_id}:{page + 1}",
-            )
-        )
-    if nav_buttons:
-        kb.row(*nav_buttons)
-    if likes_count < 0:
-        likes_count = 0
-    if likes_count < 0:
-        likes_count = 0
-    if dislikes_count < 0:
-        dislikes_count = 0
-    like_label = "👍✅" if rating == 1 else "👍"
-    dislike_label = "👎✅" if rating == -1 else "👎"
-    kb.row(
-        InlineKeyboardButton(text=f"{like_label} {likes_count}", callback_data=f"user:rate:1:{serial_id}"),
-        InlineKeyboardButton(text=f"{dislike_label} {dislikes_count}", callback_data=f"user:rate:-1:{serial_id}"),
-    )
     if share_link:
         kb.row(InlineKeyboardButton(text="Ulashish", url=share_link))
     return kb.as_markup()
