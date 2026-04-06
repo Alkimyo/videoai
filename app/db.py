@@ -198,6 +198,27 @@ def init_db() -> None:
         )
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS user_serial_views (
+                user_id INTEGER NOT NULL,
+                serial_id INTEGER NOT NULL,
+                views INTEGER NOT NULL,
+                last_viewed_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, serial_id)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_daily_recommendations (
+                day TEXT NOT NULL,
+                user_id INTEGER NOT NULL,
+                serial_id INTEGER NOT NULL,
+                PRIMARY KEY (day, user_id)
+            )
+            """
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
                 username TEXT
@@ -244,6 +265,7 @@ def init_db() -> None:
         _ensure_column(conn, "vip_users", "reminded_7d", "INTEGER")
         _fill_null_admin_perms(conn)
         _ensure_column(conn, "users", "username", "TEXT")
+        _ensure_column(conn, "users", "full_name", "TEXT")
         _migrate_movies(conn)
         conn.commit()
 
@@ -522,7 +544,20 @@ def get_serial_by_id(serial_id: int) -> Optional[Dict[str, object]]:
 def get_serials() -> List[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
-            "SELECT id, code, title, is_vip, created_at, banner_file_id FROM serials ORDER BY code ASC"
+            """
+            SELECT
+                s.id,
+                s.code,
+                s.title,
+                s.is_vip,
+                s.created_at,
+                s.banner_file_id,
+                COALESCE(MAX(p.created_at), s.created_at) AS last_part_at
+            FROM serials AS s
+            LEFT JOIN serial_parts AS p ON p.serial_id = s.id
+            GROUP BY s.id
+            ORDER BY s.code ASC
+            """
         )
         return [dict(row) for row in cur.fetchall()]
 
@@ -984,6 +1019,148 @@ def get_serial_like_counts_map(serial_ids: List[int]) -> Dict[int, int]:
         return {int(row["serial_id"]): int(row["cnt"]) for row in cur.fetchall()}
 
 
+def record_user_serial_view(user_id: int, serial_id: int, viewed_at: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_serial_views (user_id, serial_id, views, last_viewed_at)
+            VALUES (?, ?, 1, ?)
+            ON CONFLICT(user_id, serial_id) DO UPDATE
+            SET views = views + 1, last_viewed_at = excluded.last_viewed_at
+            """,
+            (user_id, serial_id, viewed_at),
+        )
+        conn.commit()
+
+
+def get_user_liked_serial_ids(user_id: int, limit: int = 50) -> List[int]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT serial_id
+            FROM serial_ratings
+            WHERE user_id = ? AND value = 1
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        )
+        return [int(row["serial_id"]) for row in cur.fetchall()]
+
+
+def get_user_viewed_serial_ids(user_id: int, limit: int = 50) -> List[int]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT serial_id
+            FROM user_serial_views
+            WHERE user_id = ?
+            ORDER BY last_viewed_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        )
+        return [int(row["serial_id"]) for row in cur.fetchall()]
+
+
+def get_active_user_ids(days: int = 3) -> List[int]:
+    cutoff = (dt.datetime.utcnow() - dt.timedelta(days=days)).isoformat()
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT DISTINCT user_id
+            FROM user_serial_views
+            WHERE last_viewed_at >= ?
+            """,
+            (cutoff,),
+        )
+        return [int(row["user_id"]) for row in cur.fetchall()]
+
+
+def set_user_daily_recommendation(day: str, user_id: int, serial_id: int) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO user_daily_recommendations (day, user_id, serial_id)
+            VALUES (?, ?, ?)
+            """,
+            (day, user_id, serial_id),
+        )
+        conn.commit()
+
+
+def get_user_daily_recommendations(day: str) -> Dict[int, int]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT user_id, serial_id
+            FROM user_daily_recommendations
+            WHERE day = ?
+            """,
+            (day,),
+        )
+        return {int(row["user_id"]): int(row["serial_id"]) for row in cur.fetchall()}
+
+
+def get_similar_serials_by_likes(user_id: int, limit: int = 10) -> List[int]:
+    query = """
+        WITH liked AS (
+            SELECT serial_id
+            FROM serial_ratings
+            WHERE user_id = ? AND value = 1
+        ),
+        seen AS (
+            SELECT serial_id FROM user_serial_views WHERE user_id = ?
+            UNION
+            SELECT serial_id FROM serial_ratings WHERE user_id = ? AND value = 1
+        )
+        SELECT r2.serial_id, COUNT(*) AS score
+        FROM serial_ratings AS r1
+        JOIN serial_ratings AS r2
+            ON r1.user_id = r2.user_id AND r2.value = 1
+        WHERE r1.serial_id IN (SELECT serial_id FROM liked)
+          AND r1.value = 1
+          AND r2.serial_id NOT IN (SELECT serial_id FROM seen)
+        GROUP BY r2.serial_id
+        ORDER BY score DESC, r2.serial_id ASC
+        LIMIT ?
+    """
+    with _connect() as conn:
+        cur = conn.execute(query, (user_id, user_id, user_id, limit))
+        return [int(row["serial_id"]) for row in cur.fetchall()]
+
+
+def get_similar_serials_by_views(
+    user_id: int, limit: int = 10, seed_limit: int = 5
+) -> List[int]:
+    query = """
+        WITH seed AS (
+            SELECT serial_id
+            FROM user_serial_views
+            WHERE user_id = ?
+            ORDER BY last_viewed_at DESC
+            LIMIT ?
+        ),
+        seen AS (
+            SELECT serial_id FROM user_serial_views WHERE user_id = ?
+            UNION
+            SELECT serial_id FROM serial_ratings WHERE user_id = ? AND value = 1
+        )
+        SELECT v2.serial_id, COUNT(*) AS score
+        FROM user_serial_views AS v1
+        JOIN user_serial_views AS v2
+            ON v1.user_id = v2.user_id
+        WHERE v1.serial_id IN (SELECT serial_id FROM seed)
+          AND v2.serial_id NOT IN (SELECT serial_id FROM seen)
+        GROUP BY v2.serial_id
+        ORDER BY score DESC, v2.serial_id ASC
+        LIMIT ?
+    """
+    with _connect() as conn:
+        cur = conn.execute(query, (user_id, seed_limit, user_id, user_id, limit))
+        return [int(row["serial_id"]) for row in cur.fetchall()]
+
+
 def get_top_liked_serials(limit: int, include_vip: bool) -> List[Dict[str, object]]:
     where = "" if include_vip else "WHERE s.is_vip = 0"
     query = f"""
@@ -1176,16 +1353,20 @@ def get_blocked_users() -> List[int]:
         return [int(row["user_id"]) for row in cur.fetchall()]
 
 
-def add_user(user_id: int, username: Optional[str] = None) -> None:
+def add_user(
+    user_id: int,
+    username: Optional[str] = None,
+    full_name: Optional[str] = None,
+) -> None:
     with _connect() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)",
-            (user_id, username or ""),
+            "INSERT OR IGNORE INTO users (user_id, username, full_name) VALUES (?, ?, ?)",
+            (user_id, username or "", full_name or ""),
         )
-        if username:
+        if username or full_name:
             conn.execute(
-                "UPDATE users SET username = ? WHERE user_id = ?",
-                (username, user_id),
+                "UPDATE users SET username = ?, full_name = ? WHERE user_id = ?",
+                (username or "", full_name or "", user_id),
             )
         conn.commit()
 
@@ -1269,7 +1450,24 @@ def mark_vip_reminder(user_id: int, days: int) -> None:
 def get_users() -> List[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
-            "SELECT user_id, username FROM users ORDER BY user_id"
+            """
+            SELECT user_id, username, full_name
+            FROM users
+            ORDER BY
+                CASE
+                    WHEN username IS NOT NULL AND TRIM(username) != '' THEN 0
+                    WHEN full_name IS NOT NULL AND TRIM(full_name) != '' THEN 1
+                    ELSE 2
+                END,
+                LOWER(
+                    COALESCE(
+                        NULLIF(username, ''),
+                        NULLIF(full_name, ''),
+                        CAST(user_id AS TEXT)
+                    )
+                ),
+                user_id
+            """
         )
         return [dict(row) for row in cur.fetchall()]
 

@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import datetime as dt
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher
@@ -23,8 +24,16 @@ from app.config import (
     WEBAPP_PORT,
 )
 from app.config import OWNER_ID
-from app.db import ensure_owner, get_admins, init_db, is_blocked_user
-from app.handlers import _log_event, router, vip_reminder_loop, backup_schedule_loop, cache_cleanup_loop
+from app.db import ensure_owner, get_admins, init_db, is_blocked_user, set_setting
+from app.handlers import (
+    _log_event,
+    router,
+    vip_reminder_loop,
+    backup_schedule_loop,
+    cache_cleanup_loop,
+    daily_recommendation_loop,
+    daily_recommendation_prepare_loop,
+)
 
 
 def _safe_text(value: str | None, limit: int = 500) -> str:
@@ -39,6 +48,7 @@ def _safe_text(value: str | None, limit: int = 500) -> str:
 class UserMessageLogMiddleware(BaseMiddleware):
     async def __call__(self, handler, event: Message, data: dict):
         if event and event.from_user:
+            set_setting("last_activity_at", dt.datetime.utcnow().isoformat())
             username = event.from_user.username or ""
             text = _safe_text(event.text or event.caption)
             detail = (
@@ -53,6 +63,7 @@ class UserMessageLogMiddleware(BaseMiddleware):
 class UserCallbackLogMiddleware(BaseMiddleware):
     async def __call__(self, handler, event: CallbackQuery, data: dict):
         if event and event.from_user:
+            set_setting("last_activity_at", dt.datetime.utcnow().isoformat())
             username = event.from_user.username or ""
             data_text = _safe_text(event.data, limit=200)
             message_id = event.message.message_id if event.message else "-"
@@ -94,13 +105,14 @@ async def on_startup(*_: object) -> None:
 async def set_bot_commands(bot: Bot) -> None:
     default_commands = [
         BotCommand(command="start", description="Botni ishga tushirish"),
-        BotCommand(command="help", description="Yordam"),
+        BotCommand(command="help", description="Yordam (yordam)"),
         BotCommand(command="serial", description="Drama yuborish"),
+        BotCommand(command="search", description="Drama qidirish"),
         BotCommand(command="drama", description="Drama yuborish (guruh)"),
     ]
     admin_commands = [
         BotCommand(command="start", description="Botni ishga tushirish"),
-        BotCommand(command="help", description="Yordam"),
+        BotCommand(command="help", description="Yordam (yordam)"),
         BotCommand(command="admin", description="Admin panel"),
         BotCommand(command="admins", description="Adminlar ro'yxati"),
         BotCommand(command="addadmin", description="Admin qo'shish"),
@@ -123,6 +135,7 @@ async def set_bot_commands(bot: Bot) -> None:
         BotCommand(command="importstop", description="Importni to'xtatish"),
         BotCommand(command="post", description="Kanalga post"),
         BotCommand(command="broadcast", description="E'lon yuborish"),
+        BotCommand(command="reconow", description="Tavsiya yuborish"),
         BotCommand(command="usend", description="Userbot bilan yuborish"),
         BotCommand(command="vip", description="VIP info"),
         BotCommand(command="addvip", description="VIP qo'shish"),
@@ -217,6 +230,10 @@ def main() -> None:
         dp["vip_task"] = asyncio.create_task(vip_reminder_loop(bot))
         dp["backup_task"] = asyncio.create_task(backup_schedule_loop(bot))
         dp["cache_task"] = asyncio.create_task(cache_cleanup_loop())
+        dp["reco_task"] = asyncio.create_task(daily_recommendation_loop(bot))
+        dp["reco_prepare_task"] = asyncio.create_task(
+            daily_recommendation_prepare_loop(bot)
+        )
 
     dp.startup.register(start_reminders)
     dp.startup.register(set_bot_commands)

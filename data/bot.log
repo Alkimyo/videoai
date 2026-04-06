@@ -16502,3 +16502,226 @@
 2026-04-03T06:04:48.370292 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.DOCUMENT message_id=15640 text=Backup
 2026-04-03T06:04:52.888501 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=restoredb:confirm message_id=15641
 2026-04-03T06:04:53.066059 restore_db_success user_id=6499839380 backup=/tmp/serialbot-db-backup-20260403-060452.db
+2026-04-03T06:22:57.546704 user_message user_id=8554211484 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=521 text=Haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+2026-04-03T06:23:10.809807 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.TEXT message_id=15642 text=/start
+2026-04-03T06:23:10.811623 user_start user_id=5792951787
+2026-04-03T06:33:47.867491 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.NEW_CHAT_MEMBERS message_id=522 text=
+2026-04-03T06:37:50.442205 user_action user_id=6653202214 chat_id=-1003473985730 username= data=user:serial:500 message_id=507
+2026-04-03T06:37:56.109031 user_action user_id=6653202214 chat_id=-1003473985730 username= data=user:serial:489 message_id=507
+2026-04-03T06:38:16.785409 user_action user_id=6653202214 chat_id=-1003473985730 username= data=user:serial:489 message_id=507
+2026-04-03T06:39:08.810682 user_action user_id=6653202214 chat_id=-1003473985730 username= data=user:serial:489 message_id=507
+2026-04-03T08:19:25.611411 user_message user_id=5792951787 chat_id=-5252186447 chat_type=group username=humble_student1 msg_type=ContentType.TEXT message_id=15647 text=/start
+2026-04-03T08:19:25.613471 user_start user_id=5792951787
+2026-04-03T08:19:25.629213 user_message user_id=5792951787 chat_id=-5252186447 chat_type=group username=humble_student1 msg_type=ContentType.TEXT message_id=15646 text=/serialcancel
+2026-04-04T09:12:24.810108 user_message user_id=6180023662 chat_id=6180023662 chat_type=private username= msg_type=ContentType.TEXT message_id=15659 text=/start
+2026-04-04T09:12:24.816146 user_start user_id=6180023662
+2026-04-04T09:12:24.826612 user_message user_id=6180023662 chat_id=6180023662 chat_type=private username= msg_type=ContentType.TEXT message_id=15660 text=/start
+2026-04-04T09:12:24.828979 user_start user_id=6180023662
+2026-04-04T09:12:24.842844 user_message user_id=6022360905 chat_id=6022360905 chat_type=private username= msg_type=ContentType.TEXT message_id=15661 text=/start
+2026-04-04T09:12:24.847887 user_start user_id=6022360905
+2026-04-04T09:12:24.855458 user_message user_id=6022360905 chat_id=6022360905 chat_type=private username= msg_type=ContentType.TEXT message_id=15662 text=/start
+2026-04-04T09:12:24.856844 user_start user_id=6022360905
+2026-04-04T09:12:24.892319 user_message user_id=6022360905 chat_id=6022360905 chat_type=private username= msg_type=ContentType.TEXT message_id=15663 text=/serial
+2026-04-04T09:12:24.901296 user_message user_id=6022360905 chat_id=6022360905 chat_type=private username= msg_type=ContentType.TEXT message_id=15664 text=Orol
+2026-04-04T09:12:24.909843 user_message user_id=6022360905 chat_id=6022360905 chat_type=private username= msg_type=ContentType.TEXT message_id=15665 text=Orol dramma
+2026-04-04T09:12:42.892915 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15673 text=/admin
+2026-04-04T09:12:48.255025 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:broadcast message_id=15674
+2026-04-04T09:13:18.596009 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.VIDEO message_id=15675 text=3ta shipiyon singling bo'lganida yoxud  🔞 yosh auditoriya ko'rmasin ❌❌
+2026-04-04T09:13:23.972737 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=broadcastattach:yes message_id=15676
+2026-04-04T09:13:26.635839 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15677 text=1
+2026-04-04T09:13:29.387117 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=broadcast:vip message_id=15678
+2026-04-04T09:13:30.970486 broadcast user_id=6499839380 target=vip ok=2 failed=0
+2026-04-04T09:14:38.293221 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.VIDEO message_id=15681 text=Sevgan qizing kareteyist bo'lsa Drama nomi: Do'kon yulduzi TOMOSHA QILISH UCHUN  #by_yujin  #kdrama_videos
+2026-04-04T09:14:45.660594 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15682 text=/admin
+2026-04-04T09:14:47.941175 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:broadcast message_id=15683
+2026-04-04T09:14:53.869154 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.VIDEO message_id=15684 text=Sevgan qizing kareteyist bo'lsa Drama nomi: Do'kon yulduzi TOMOSHA QILISH UCHUN  #by_yujin  #kdrama_videos
+2026-04-04T09:15:00.024038 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=broadcastattach:yes message_id=15685
+2026-04-04T09:15:02.466733 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15686 text=200
+2026-04-04T09:15:06.031631 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=broadcast:admins message_id=15687
+2026-04-04T09:15:06.891991 broadcast user_id=6499839380 target=admins ok=2 failed=0
+2026-04-04T09:15:32.844196 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.TEXT message_id=15690 text=/start 200
+2026-04-04T09:15:32.847199 user_start user_id=5792951787
+2026-04-04T09:15:36.675165 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.TEXT message_id=15692 text=200
+2026-04-04T09:15:36.676743 serial_request user_id=5792951787 query=200
+2026-04-04T09:24:12.421779 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15694 text=/admin
+2026-04-04T09:24:15.222826 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users message_id=15695
+2026-04-04T09:24:22.012013 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15695
+2026-04-04T09:24:24.255310 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15695
+2026-04-04T09:24:26.918248 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:3 message_id=15695
+2026-04-04T09:24:28.581151 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:4 message_id=15695
+2026-04-04T09:24:30.812847 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15695
+2026-04-04T09:24:32.073067 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:6 message_id=15695
+2026-04-04T09:24:34.144638 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:7 message_id=15695
+2026-04-04T09:24:36.059217 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:8 message_id=15695
+2026-04-04T09:24:36.959711 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:9 message_id=15695
+2026-04-04T09:24:37.601784 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:10 message_id=15695
+2026-04-04T09:24:38.406032 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:11 message_id=15695
+2026-04-04T09:24:40.073443 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:12 message_id=15695
+2026-04-04T09:25:11.753742 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:11 message_id=15695
+2026-04-04T09:25:12.588523 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:10 message_id=15695
+2026-04-04T09:25:13.411402 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:9 message_id=15695
+2026-04-04T09:25:14.433761 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:8 message_id=15695
+2026-04-04T09:25:15.661899 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:7 message_id=15695
+2026-04-04T09:25:17.298331 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:6 message_id=15695
+2026-04-04T09:25:18.115486 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15695
+2026-04-04T09:25:18.936108 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:4 message_id=15695
+2026-04-04T09:25:20.162032 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:3 message_id=15695
+2026-04-04T09:25:21.802827 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15695
+2026-04-04T09:25:23.968304 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15695
+2026-04-04T09:25:25.905524 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:0 message_id=15695
+2026-04-04T09:25:37.909209 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15695
+2026-04-04T09:25:48.823789 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:0 message_id=15695
+2026-04-04T09:28:03.350496 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15696 text=/admin
+2026-04-04T09:28:06.452083 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users message_id=15697
+2026-04-04T09:28:15.629460 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15697
+2026-04-04T09:28:25.302772 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15697
+2026-04-04T09:28:26.959421 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:3 message_id=15697
+2026-04-04T09:28:29.594069 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:4 message_id=15697
+2026-04-04T09:28:46.390763 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15697
+2026-04-04T09:28:48.504936 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:6 message_id=15697
+2026-04-04T09:28:50.162230 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:7 message_id=15697
+2026-04-04T09:28:51.522296 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:8 message_id=15697
+2026-04-04T09:28:54.181177 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:9 message_id=15697
+2026-04-04T09:28:57.058573 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:10 message_id=15697
+2026-04-04T09:28:58.485550 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:11 message_id=15697
+2026-04-04T09:29:00.160094 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:12 message_id=15697
+2026-04-04T09:29:02.988226 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:13 message_id=15697
+2026-04-04T09:29:06.682613 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:14 message_id=15697
+2026-04-04T09:29:07.374991 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:15 message_id=15697
+2026-04-04T09:29:08.725981 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:16 message_id=15697
+2026-04-04T09:29:10.150113 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=noop message_id=15697
+2026-04-04T09:29:12.372369 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:17 message_id=15697
+2026-04-04T09:29:14.871599 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:18 message_id=15697
+2026-04-04T09:29:16.502876 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:19 message_id=15697
+2026-04-04T09:29:20.213662 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:20 message_id=15697
+2026-04-04T09:29:28.861523 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:21 message_id=15697
+2026-04-04T09:32:01.897611 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15698 text=/admin
+2026-04-04T09:32:04.832526 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users message_id=15699
+2026-04-04T09:32:14.167419 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15699
+2026-04-04T09:32:26.101212 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15699
+2026-04-04T09:32:36.556203 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:3 message_id=15699
+2026-04-04T09:32:41.863583 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:3 message_id=15699
+2026-04-04T09:32:43.537158 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:4 message_id=15699
+2026-04-04T09:32:52.068228 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15699
+2026-04-04T09:32:54.583317 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15699
+2026-04-04T09:32:58.016180 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15699
+2026-04-04T09:33:00.425605 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:6 message_id=15699
+2026-04-04T09:33:12.832976 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:7 message_id=15699
+2026-04-04T09:33:14.126599 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:7 message_id=15699
+2026-04-04T09:34:07.292349 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:8 message_id=15699
+2026-04-04T09:34:24.413394 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:9 message_id=15699
+2026-04-04T09:34:40.077619 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:10 message_id=15699
+2026-04-04T09:34:55.849452 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:11 message_id=15699
+2026-04-04T09:35:03.853765 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:12 message_id=15699
+2026-04-04T09:35:33.105580 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:13 message_id=15699
+2026-04-04T09:35:38.868643 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:14 message_id=15699
+2026-04-04T09:35:47.467997 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:15 message_id=15699
+2026-04-04T09:35:51.363246 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:15 message_id=15699
+2026-04-04T09:35:53.537506 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:16 message_id=15699
+2026-04-04T09:35:55.556361 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:16 message_id=15699
+2026-04-04T09:35:59.307134 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:17 message_id=15699
+2026-04-04T09:36:04.469869 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:18 message_id=15699
+2026-04-04T09:36:08.615487 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:18 message_id=15699
+2026-04-04T09:36:24.524758 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:19 message_id=15699
+2026-04-04T09:36:54.150653 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:20 message_id=15699
+2026-04-04T09:36:56.657291 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15700 text=/admin
+2026-04-04T09:37:00.567033 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:19 message_id=15699
+2026-04-04T09:37:05.689661 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:20 message_id=15699
+2026-04-04T09:37:12.871351 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:21 message_id=15699
+2026-04-04T09:37:20.655277 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:22 message_id=15699
+2026-04-04T09:43:01.614012 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15702 text=/admin
+2026-04-04T09:43:04.096485 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users message_id=15703
+2026-04-04T09:43:14.473899 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15703
+2026-04-04T09:43:23.149703 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15703
+2026-04-04T09:43:30.315648 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:3 message_id=15703
+2026-04-04T09:43:37.665832 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:4 message_id=15703
+2026-04-04T09:43:49.543106 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15704 text=/usend
+2026-04-04T09:44:07.561950 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15706 text=/usend @by_yujin hello
+2026-04-04T09:44:35.430122 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15703
+2026-04-04T09:44:48.736643 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:user:msg:5792951787:5 message_id=15703
+2026-04-04T09:44:54.474897 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15708 text=hello
+2026-04-04T09:44:54.485523 serial_request user_id=6499839380 query=hello
+2026-04-04T09:45:04.912795 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15710 text=/cancel
+2026-04-04T09:45:07.974450 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15712 text=/admin
+2026-04-04T09:45:10.854268 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users message_id=15713
+2026-04-04T09:45:19.679682 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15713
+2026-04-04T09:45:25.414955 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15713
+2026-04-04T09:45:32.351906 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:3 message_id=15713
+2026-04-04T09:45:40.368312 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:4 message_id=15713
+2026-04-04T09:45:47.530354 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15713
+2026-04-04T09:45:50.397524 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15713
+2026-04-04T09:45:53.675303 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:6 message_id=15713
+2026-04-04T09:46:02.466266 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15713
+2026-04-04T09:46:09.644062 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:user:msg:5792951787:5 message_id=15713
+2026-04-04T09:46:16.202109 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15714 text=hello
+2026-04-04T09:46:16.205419 serial_request user_id=6499839380 query=hello
+2026-04-04T09:49:02.991663 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:back message_id=15713
+2026-04-04T09:49:06.372485 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users message_id=15713
+2026-04-04T09:49:17.024261 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15713
+2026-04-04T09:49:23.180217 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15713
+2026-04-04T09:49:30.552647 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:3 message_id=15713
+2026-04-04T09:49:38.730524 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:4 message_id=15713
+2026-04-04T09:49:45.298508 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15713
+2026-04-04T09:49:51.255852 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:6 message_id=15713
+2026-04-04T09:49:57.789061 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:5 message_id=15713
+2026-04-04T09:50:06.476367 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:user:msg:5792951787:5 message_id=15713
+2026-04-04T09:50:10.064502 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15716 text=hello
+2026-04-04T09:50:10.068999 serial_request user_id=6499839380 query=hello
+2026-04-04T09:50:15.791589 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15718 text=/admin
+2026-04-04T09:50:17.841331 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users message_id=15719
+2026-04-04T09:50:25.026112 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15719
+2026-04-04T09:50:33.838260 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15719
+2026-04-04T09:50:41.829211 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:3 message_id=15719
+2026-04-04T09:51:00.630176 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15719
+2026-04-04T09:51:14.575374 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:user:msg:6499839380:2 message_id=15719
+2026-04-04T09:51:17.651201 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15720 text=hello
+2026-04-04T09:51:17.654168 serial_request user_id=6499839380 query=hello
+2026-04-04T09:54:43.674784 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:back message_id=15719
+2026-04-04T09:54:45.924961 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users message_id=15719
+2026-04-04T09:54:55.567295 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15719
+2026-04-04T09:55:02.746246 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15719
+2026-04-04T09:55:14.209476 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:3 message_id=15719
+2026-04-04T09:55:16.598988 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:1 message_id=15719
+2026-04-04T09:55:20.167475 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:user:msg:6499839380:2 message_id=15719
+2026-04-04T09:55:23.988972 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:users:2 message_id=15719
+2026-04-04T09:55:33.820924 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:user:msg:6499839380:2 message_id=15719
+2026-04-04T09:55:37.111261 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15722 text=hello
+2026-04-05T14:55:02.994828 user_message user_id=2028632445 chat_id=2028632445 chat_type=private username=ziyoda_abdushukurova msg_type=ContentType.TEXT message_id=15725 text=/start
+2026-04-05T14:55:03.000998 user_start user_id=2028632445
+2026-04-05T14:55:03.014843 user_message user_id=1766642252 chat_id=1766642252 chat_type=private username= msg_type=ContentType.TEXT message_id=15728 text=/start
+2026-04-05T14:55:03.019638 user_start user_id=1766642252
+2026-04-05T14:55:03.031175 user_message user_id=7421427822 chat_id=7421427822 chat_type=private username= msg_type=ContentType.TEXT message_id=15731 text=/start
+2026-04-05T14:55:03.035956 user_start user_id=7421427822
+2026-04-05T14:55:03.049048 user_message user_id=7421427822 chat_id=7421427822 chat_type=private username= msg_type=ContentType.TEXT message_id=15730 text=/start
+2026-04-05T14:55:03.051281 user_start user_id=7421427822
+2026-04-05T14:55:03.072505 user_message user_id=7421427822 chat_id=7421427822 chat_type=private username= msg_type=ContentType.TEXT message_id=15732 text=/help
+2026-04-05T14:55:03.092056 user_message user_id=2028632445 chat_id=2028632445 chat_type=private username=ziyoda_abdushukurova msg_type=ContentType.TEXT message_id=15727 text=/help
+2026-04-05T14:55:03.128900 user_message user_id=7421427822 chat_id=7421427822 chat_type=private username= msg_type=ContentType.TEXT message_id=15733 text=/help
+2026-04-05T14:55:03.160447 user_message user_id=2028632445 chat_id=2028632445 chat_type=private username=ziyoda_abdushukurova msg_type=ContentType.TEXT message_id=15726 text=/serial
+2026-04-05T14:55:03.176662 user_message user_id=1766642252 chat_id=1766642252 chat_type=private username= msg_type=ContentType.TEXT message_id=15729 text=580
+2026-04-05T14:58:54.059273 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15741 text=/start
+2026-04-05T14:58:54.064902 user_start user_id=6499839380
+2026-04-05T14:59:00.812581 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=user:toplikes message_id=15742
+2026-04-05T14:59:06.146730 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=user:serials:new:0 message_id=15742
+2026-04-05T14:59:52.245151 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=user:serial:500 message_id=15742
+2026-04-05T14:59:58.384431 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=user:serial:305 message_id=15742
+2026-04-05T15:00:10.242226 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15746 text=/restoredb
+2026-04-05T15:00:12.907205 restore_db_start user_id=6499839380
+2026-04-05T15:00:23.784561 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.DOCUMENT message_id=15748 text=Backup
+2026-04-05T15:00:35.887090 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=restoredb:confirm message_id=15749
+2026-04-05T15:00:36.230215 restore_db_success user_id=6499839380 backup=/tmp/serialbot-db-backup-20260405-150035.db
+2026-04-05T15:00:40.578468 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15750 text=/start
+2026-04-05T15:00:40.584807 user_start user_id=6499839380
+2026-04-05T15:00:47.336006 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=user:serials message_id=15751
+2026-04-05T15:00:50.649853 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=user:serials:new:0 message_id=15751
+2026-04-05T15:01:16.833250 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15753 text=/admin
+2026-04-05T15:01:25.647849 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:help message_id=15754
+2026-04-05T15:01:34.432791 user_action user_id=6499839380 chat_id=6499839380 username=By_yujin data=admin:back message_id=15754
+2026-04-05T15:01:40.359327 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15755 text=/start
+2026-04-05T15:01:40.362091 user_start user_id=6499839380
+2026-04-05T15:05:12.975504 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15758 text=/start
+2026-04-05T15:05:12.977476 user_start user_id=6499839380
+2026-04-05T15:05:27.306214 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15761 text=/search
+2026-04-06T00:30:31.600549 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username=By_yujin msg_type=ContentType.TEXT message_id=15763 text=/start
+2026-04-06T00:30:31.602950 user_start user_id=6499839380
+2026-04-06T00:30:31.638221 user_message user_id=925721581 chat_id=-2072272811693 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=25 text=Qonli gul

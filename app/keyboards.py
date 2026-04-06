@@ -98,7 +98,6 @@ def user_keyboard():
     kb.button(text="Drama kodini yuborish", callback_data="user:sendcode")
     kb.button(text="Dramalar ro'yxati", callback_data="user:serials")
     kb.button(text="Top dramalar", callback_data="user:toplikes")
-    kb.button(text="Drama qidirish", callback_data="user:search")
     kb.button(text="Admin bilan bog'lanish", callback_data="user:contact")
     kb.button(text="VIP haqida", callback_data="user:vipinfo")
     kb.adjust(1)
@@ -228,6 +227,7 @@ def users_manage_keyboard(users: Iterable[dict], blocked_ids: set[int], page: in
         action = "unblock" if is_blocked else "block"
         kb.row(
             InlineKeyboardButton(text=label, callback_data="noop"),
+            InlineKeyboardButton(text="Xabar", callback_data=f"admin:user:msg:{user_id}:{page}"),
             InlineKeyboardButton(
                 text=action_text,
                 callback_data=f"admin:user:{action}:{user_id}:{page}",
