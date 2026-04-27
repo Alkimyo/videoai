@@ -1,16 +1,161 @@
 import json
 import os
+import shutil
 import sqlite3
+import tempfile
+import zipfile
 import datetime as dt
 from typing import Dict, List, Optional, Tuple
 
-from app.config import DB_PATH, OWNER_ID
+from app.config import (
+    AUTO_RESTORE_DB,
+    AUTO_RESTORE_ONLY_IF_NEWER,
+    BACKUP_DIR,
+    DB_PATH,
+    OWNER_ID,
+)
 
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _is_sqlite_db_ok(path: str) -> bool:
+    if not path or not os.path.exists(path):
+        return False
+    try:
+        with sqlite3.connect(path) as conn:
+            cur = conn.execute("PRAGMA quick_check(1)")
+            row = cur.fetchone()
+            return bool(row) and row[0] == "ok"
+    except sqlite3.DatabaseError:
+        return False
+    except Exception:
+        return False
+
+
+def _find_latest_backup_file(backup_dir: str) -> Optional[str]:
+    if not backup_dir or not os.path.isdir(backup_dir):
+        return None
+    candidates: list[str] = []
+    for name in os.listdir(backup_dir):
+        lower = name.lower()
+        if not (lower.endswith(".zip") or lower.endswith(".db")):
+            continue
+        path = os.path.join(backup_dir, name)
+        if os.path.isfile(path):
+            candidates.append(path)
+    if not candidates:
+        return None
+    try:
+        candidates.sort(key=os.path.getmtime, reverse=True)
+    except OSError:
+        candidates.sort(reverse=True)
+    return candidates[0]
+
+
+def _extract_db_from_zip(zip_path: str, tmp_dir: str) -> Optional[str]:
+    expected_name = (os.path.basename(DB_PATH) or "bot.db").lower()
+    try:
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            candidate = None
+            for name in archive.namelist():
+                if os.path.basename(name).lower() == expected_name:
+                    candidate = name
+                    break
+            if not candidate:
+                for name in archive.namelist():
+                    if name.lower().endswith(expected_name):
+                        candidate = name
+                        break
+            if not candidate:
+                for name in archive.namelist():
+                    if name.lower().endswith(".db"):
+                        candidate = name
+                        break
+            if not candidate:
+                return None
+            out_path = os.path.join(tmp_dir, os.path.basename(candidate) or "bot.db")
+            with archive.open(candidate) as src, open(out_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            return out_path
+    except Exception:
+        return None
+
+
+def auto_restore_db_from_latest_backup() -> bool:
+    if not AUTO_RESTORE_DB:
+        return False
+
+    backup_path = _find_latest_backup_file(BACKUP_DIR)
+    if not backup_path:
+        return False
+
+    db_exists = os.path.exists(DB_PATH)
+    db_ok = _is_sqlite_db_ok(DB_PATH) if db_exists else False
+
+    if db_exists and db_ok and AUTO_RESTORE_ONLY_IF_NEWER:
+        try:
+            if os.path.getmtime(backup_path) <= os.path.getmtime(DB_PATH):
+                return False
+        except OSError:
+            return False
+
+    timestamp = dt.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    prev_db_path = None
+    if db_exists:
+        prev_db_path = os.path.join("/tmp", f"serialbot-prev-{timestamp}.db")
+        try:
+            shutil.copy2(DB_PATH, prev_db_path)
+        except OSError:
+            prev_db_path = None
+
+    restore_db_path = None
+    try:
+        if backup_path.lower().endswith(".db"):
+            restore_db_path = backup_path
+        else:
+            with tempfile.TemporaryDirectory(prefix="serialbot-autorestore-") as tmp_dir:
+                extracted = _extract_db_from_zip(backup_path, tmp_dir)
+                if not extracted:
+                    return False
+                restore_db_path = extracted
+                _replace_db_file(restore_db_path, timestamp=timestamp)
+        if restore_db_path and restore_db_path == backup_path:
+            _replace_db_file(restore_db_path, timestamp=timestamp)
+    except Exception as exc:
+        print(f"[auto-restore] failed: {exc}")
+        return False
+
+    if not _is_sqlite_db_ok(DB_PATH):
+        if prev_db_path and os.path.exists(prev_db_path):
+            try:
+                _replace_db_file(prev_db_path, timestamp=f"rollback-{timestamp}")
+            except Exception:
+                pass
+        return False
+
+    print(f"[auto-restore] restored from {backup_path}")
+    return True
+
+
+def _replace_db_file(source_db_path: str, timestamp: str) -> None:
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+    base = os.path.basename(DB_PATH) or "bot.db"
+    tmp_path = os.path.join(db_dir or ".", f".{base}.{timestamp}.tmp")
+    shutil.copy2(source_db_path, tmp_path)
+    os.replace(tmp_path, DB_PATH)
+    for suffix in ("-wal", "-shm", "-journal"):
+        try:
+            os.remove(f"{DB_PATH}{suffix}")
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
 
 
 def init_db() -> None:
@@ -562,6 +707,35 @@ def get_serials() -> List[Dict[str, object]]:
         return [dict(row) for row in cur.fetchall()]
 
 
+def count_serials() -> int:
+    with _connect() as conn:
+        cur = conn.execute("SELECT COUNT(1) AS cnt FROM serials")
+        return int(cur.fetchone()["cnt"])
+
+
+def get_serials_page(limit: int, offset: int) -> List[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT
+                s.id,
+                s.code,
+                s.title,
+                s.is_vip,
+                s.created_at,
+                s.banner_file_id,
+                COALESCE(MAX(p.created_at), s.created_at) AS last_part_at
+            FROM serials AS s
+            LEFT JOIN serial_parts AS p ON p.serial_id = s.id
+            GROUP BY s.id
+            ORDER BY s.code ASC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
 def count_serials_by_title(query: str, include_vip: bool) -> int:
     like = f"%{query}%"
     with _connect() as conn:
@@ -1102,6 +1276,22 @@ def get_user_daily_recommendations(day: str) -> Dict[int, int]:
         return {int(row["user_id"]): int(row["serial_id"]) for row in cur.fetchall()}
 
 
+def get_user_daily_recommendations_for_users(day: str, user_ids: List[int]) -> Dict[int, int]:
+    if not user_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(user_ids))
+    with _connect() as conn:
+        cur = conn.execute(
+            f"""
+            SELECT user_id, serial_id
+            FROM user_daily_recommendations
+            WHERE day = ? AND user_id IN ({placeholders})
+            """,
+            [day, *user_ids],
+        )
+        return {int(row["user_id"]): int(row["serial_id"]) for row in cur.fetchall()}
+
+
 def get_similar_serials_by_likes(user_id: int, limit: int = 10) -> List[int]:
     query = """
         WITH liked AS (
@@ -1371,6 +1561,46 @@ def add_user(
         conn.commit()
 
 
+def get_user_id_by_username(username: str) -> Optional[int]:
+    clean = (username or "").strip().lstrip("@")
+    if not clean:
+        return None
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT user_id
+            FROM users
+            WHERE username IS NOT NULL
+              AND TRIM(username) != ''
+              AND LOWER(username) = LOWER(?)
+            LIMIT 1
+            """,
+            (clean,),
+        )
+        row = cur.fetchone()
+        return int(row["user_id"]) if row else None
+
+
+def get_user_id_by_username(username: str) -> Optional[int]:
+    clean = (username or "").strip().lstrip("@")
+    if not clean:
+        return None
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT user_id
+            FROM users
+            WHERE username IS NOT NULL
+              AND TRIM(username) != ''
+              AND LOWER(username) = LOWER(?)
+            LIMIT 1
+            """,
+            (clean,),
+        )
+        row = cur.fetchone()
+        return int(row["user_id"]) if row else None
+
+
 def set_setting(key: str, value: str) -> None:
     with _connect() as conn:
         conn.execute(
@@ -1432,6 +1662,26 @@ def get_vip_users() -> List[Dict[str, object]]:
         return [dict(row) for row in cur.fetchall()]
 
 
+def count_vip_users() -> int:
+    with _connect() as conn:
+        cur = conn.execute("SELECT COUNT(1) AS cnt FROM vip_users")
+        return int(cur.fetchone()["cnt"])
+
+
+def get_vip_users_page(limit: int, offset: int) -> List[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT user_id, expires_at, reminded_7d, reminded_2d, reminded_1d
+            FROM vip_users
+            ORDER BY expires_at ASC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
 def mark_vip_reminder(user_id: int, days: int) -> None:
     if days == 7:
         column = "reminded_7d"
@@ -1468,6 +1718,49 @@ def get_users() -> List[Dict[str, object]]:
                 ),
                 user_id
             """
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+def count_users() -> int:
+    with _connect() as conn:
+        cur = conn.execute("SELECT COUNT(1) AS cnt FROM users")
+        return int(cur.fetchone()["cnt"])
+
+
+def iter_user_ids(batch_size: int = 500):
+    with _connect() as conn:
+        cur = conn.execute("SELECT user_id FROM users")
+        while True:
+            rows = cur.fetchmany(batch_size)
+            if not rows:
+                break
+            yield [int(row["user_id"]) for row in rows]
+
+
+def get_users_page(limit: int, offset: int) -> List[Dict[str, object]]:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            SELECT user_id, username, full_name
+            FROM users
+            ORDER BY
+                CASE
+                    WHEN username IS NOT NULL AND TRIM(username) != '' THEN 0
+                    WHEN full_name IS NOT NULL AND TRIM(full_name) != '' THEN 1
+                    ELSE 2
+                END,
+                LOWER(
+                    COALESCE(
+                        NULLIF(username, ''),
+                        NULLIF(full_name, ''),
+                        CAST(user_id AS TEXT)
+                    )
+                ),
+                user_id
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
         )
         return [dict(row) for row in cur.fetchall()]
 

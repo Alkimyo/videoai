@@ -24,7 +24,14 @@ from app.config import (
     WEBAPP_PORT,
 )
 from app.config import OWNER_ID
-from app.db import ensure_owner, get_admins, init_db, is_blocked_user, set_setting
+from app.db import (
+    auto_restore_db_from_latest_backup,
+    ensure_owner,
+    get_admins,
+    init_db,
+    is_blocked_user,
+    set_setting,
+)
 from app.handlers import (
     _log_event,
     router,
@@ -89,6 +96,70 @@ class BlockedUserCallbackMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+class OverloadGuardMiddleware(BaseMiddleware):
+    def __init__(self, capacity: int, heavy_capacity: int) -> None:
+        self._capacity = capacity
+        self._heavy_capacity = heavy_capacity
+        self._semaphore = asyncio.Semaphore(capacity)
+        self._heavy_semaphore = asyncio.Semaphore(heavy_capacity)
+
+    @staticmethod
+    def _is_heavy_message(event: Message) -> bool:
+        text = (event.text or "").strip().lower()
+        if not text.startswith("/"):
+            return False
+        cmd = text.split()[0].lstrip("/")
+        return cmd in {"import", "broadcast", "reconow"}
+
+    @staticmethod
+    def _is_heavy_callback(event: CallbackQuery) -> bool:
+        data = (event.data or "").lower()
+        return data.startswith(("import:", "broadcast:", "newdrama:", "newpart:"))
+
+    async def _respond_busy(self, event, delay_seconds: int) -> None:
+        if isinstance(event, Message):
+            await event.answer(
+                "Hozircha so'rovlarga navbat bor. "
+                "2 daqiqadan keyin yana urinib ko'ring. "
+                "Agar baribir bo'lmasa 5 daqiqadan so'ng qayta yuboring."
+            )
+            return
+        if isinstance(event, CallbackQuery):
+            await event.answer(
+                "Hozircha navbat bor. 2 daqiqadan keyin urinib ko'ring.",
+                show_alert=True,
+            )
+
+    async def __call__(self, handler, event, data: dict):
+        is_heavy = False
+        if isinstance(event, Message):
+            is_heavy = self._is_heavy_message(event)
+        elif isinstance(event, CallbackQuery):
+            is_heavy = self._is_heavy_callback(event)
+
+        try:
+            await asyncio.wait_for(self._semaphore.acquire(), timeout=120)
+        except asyncio.TimeoutError:
+            await self._respond_busy(event, 120)
+            return
+
+        heavy_acquired = False
+        if is_heavy:
+            try:
+                await asyncio.wait_for(self._heavy_semaphore.acquire(), timeout=120)
+                heavy_acquired = True
+            except asyncio.TimeoutError:
+                self._semaphore.release()
+                await self._respond_busy(event, 120)
+                return
+        try:
+            return await handler(event, data)
+        finally:
+            if heavy_acquired:
+                self._heavy_semaphore.release()
+            self._semaphore.release()
+
+
 def _health(_: web.Request) -> web.Response:
     return web.Response(text="ok")
 
@@ -98,6 +169,7 @@ def _home(_: web.Request) -> web.Response:
 
 
 async def on_startup(*_: object) -> None:
+    auto_restore_db_from_latest_backup()
     init_db()
     ensure_owner()
 
@@ -223,6 +295,8 @@ def main() -> None:
     dp.callback_query.middleware(BlockedUserCallbackMiddleware())
     dp.message.middleware(UserMessageLogMiddleware())
     dp.callback_query.middleware(UserCallbackLogMiddleware())
+    dp.message.middleware(OverloadGuardMiddleware(capacity=10, heavy_capacity=2))
+    dp.callback_query.middleware(OverloadGuardMiddleware(capacity=10, heavy_capacity=2))
     dp.include_router(router)
     dp.startup.register(on_startup)
 

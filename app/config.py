@@ -9,6 +9,13 @@ OWNER_ID = int(os.getenv("OWNER_ID", "0") or 0)
 
 DB_PATH = os.getenv("DB_PATH", "data/bot.db")
 LOG_PATH = os.getenv("LOG_PATH", "data/bot.log")
+BACKUP_DIR = os.getenv("BACKUP_DIR") or os.path.join(
+    os.path.dirname(DB_PATH) or "data",
+    "backups",
+)
+
+AUTO_RESTORE_DB = os.getenv("AUTO_RESTORE_DB", "0") == "1"
+AUTO_RESTORE_ONLY_IF_NEWER = os.getenv("AUTO_RESTORE_ONLY_IF_NEWER", "1") == "1"
 
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").rstrip("/")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")

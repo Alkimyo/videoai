@@ -42,6 +42,7 @@ from app.config import (
     BROADCAST_BATCH_SLEEP,
     CACHE_CLEAN_INTERVAL,
     CONTACT_REPLY_MAXLEN,
+    BACKUP_DIR,
     DB_PATH,
     IMPORT_GROUP_ID,
     LOG_PATH,
@@ -68,6 +69,8 @@ from app.db import (
     get_serial_parts,
     get_serial_session,
     get_serials,
+    get_serials_page,
+    count_serials,
     serial_part_source_exists,
     delete_empty_serials,
     search_serials_by_title,
@@ -79,6 +82,8 @@ from app.db import (
     add_vip_user,
     remove_vip_user,
     get_vip_users,
+    get_vip_users_page,
+    count_vip_users,
     get_vip_user,
     set_setting,
     get_setting,
@@ -88,6 +93,7 @@ from app.db import (
     save_serial_session,
     clear_serial_session,
     get_users,
+    get_users_page,
     has_admin_permission,
     has_join_request,
     set_admin_permissions,
@@ -113,10 +119,13 @@ from app.db import (
     get_user_liked_serial_ids,
     get_user_viewed_serial_ids,
     get_active_user_ids,
-    get_user_daily_recommendations,
+    get_user_daily_recommendations_for_users,
+    count_users,
+    iter_user_ids,
     get_similar_serials_by_likes,
     get_similar_serials_by_views,
     set_user_daily_recommendation,
+    get_user_id_by_username,
 )
 from app.keyboards import (
     admin_back_keyboard,
@@ -461,8 +470,8 @@ async def _bot_in_chat(bot, chat_id: int) -> bool:
     return member.status not in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}
 
 
-async def _fetch_forum_topics(client, entity) -> list:
-    topics: list = []
+async def _fetch_forum_topics(client, entity) -> list[dict[str, object]]:
+    topics: list[dict[str, object]] = []
     offset_date = None
     offset_id = 0
     offset_topic = 0
@@ -479,7 +488,16 @@ async def _fetch_forum_topics(client, entity) -> list:
         )
         if not result.topics:
             break
-        topics.extend(result.topics)
+        for topic in result.topics:
+            title = (getattr(topic, "title", "") or "").strip()
+            if not title:
+                continue
+            topics.append(
+                {
+                    "topic_id": topic.id,
+                    "title": title,
+                }
+            )
         last = result.topics[-1]
         offset_id = last.id
         offset_date = last.date
@@ -757,43 +775,8 @@ async def _run_forum_import(message: Message, group_ref: str) -> None:
         if not topics:
             await status.edit_text("Mavzular topilmadi.")
             return
-        total_topics = len(topics)
-        preview: list[dict[str, object]] = []
-        processed_topics = 0
-        last_edit = 0.0
-        for topic in topics:
-            title = (getattr(topic, "title", "") or "").strip()
-            if not title:
-                processed_topics += 1
-                continue
-            percent = int((processed_topics / total_topics) * 100)
-            now = time.monotonic()
-            if now - last_edit > 1.5:
-                try:
-                    await status.edit_text(
-                        f"Import ro'yxat: {percent}% ({processed_topics}/{total_topics})"
-                    )
-                except Exception:
-                    pass
-                last_edit = now
-            preview.append(
-                {
-                    "topic_id": topic.id,
-                    "title": title,
-                }
-            )
-            processed_topics += 1
-            if processed_topics % 5 == 0 or processed_topics == total_topics:
-                percent = int((processed_topics / total_topics) * 100)
-                try:
-                    await status.edit_text(
-                        f"Import ro'yxat: {percent}% ({processed_topics}/{total_topics})"
-                    )
-                except Exception:
-                    pass
-        if not preview:
-            await status.edit_text("Mavzular topilmadi.")
-            return
+        preview = topics
+        total_topics = len(preview)
         total_parts = 0
         IMPORT_SESSIONS[user_id] = {
             "state": "select",
@@ -1108,7 +1091,6 @@ router = Router()
 LOG_TAIL_LINES = 40
 LOG_MAX_BYTES = 10 * 1024 * 1024
 LOG_BACKUP_COUNT = 3
-BACKUP_DIR = "data/backups"
 BACKUP_KEEP = 7
 BACKUP_TZ = "Asia/Tashkent"
 
@@ -1725,6 +1707,15 @@ def _parse_part(raw: str) -> Optional[int]:
     return part if part > 0 else None
 
 
+def _parse_target_user_id(raw: str) -> Optional[int]:
+    value = (raw or "").strip()
+    if not value:
+        return None
+    if value.isdigit():
+        return int(value)
+    return get_user_id_by_username(value)
+
+
 def _now() -> str:
     return dt.datetime.utcnow().isoformat()
 
@@ -1965,7 +1956,8 @@ def _build_scheduled_backup() -> Optional[str]:
             if name.endswith(".zip")
         ]
         backups.sort(key=lambda path: os.path.getmtime(path), reverse=True)
-        for old_path in backups[BACKUP_KEEP:]:
+        keep = 1
+        for old_path in backups[keep:]:
             try:
                 os.remove(old_path)
             except OSError:
@@ -2889,17 +2881,16 @@ async def _render_users_page(callback: CallbackQuery, page: int) -> None:
     if not _has_perm(callback.from_user.id, "can_view_lists"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
-    users = get_users()
-    if not users:
+    total = count_users()
+    if total == 0:
         await callback.message.edit_text("Foydalanuvchilar yo'q.", reply_markup=admin_back_keyboard())
         return
     blocked_ids = set(get_blocked_users())
-    total = len(users)
     total_pages = max(1, (total + USERS_PER_PAGE - 1) // USERS_PER_PAGE)
     page = max(0, min(page, total_pages - 1))
     start = page * USERS_PER_PAGE
     end = start + USERS_PER_PAGE
-    page_users = users[start:end]
+    page_users = get_users_page(USERS_PER_PAGE, start)
     header = f"Foydalanuvchilar: {total} ta"
     lines = []
     entities: list[MessageEntity] = []
@@ -2942,16 +2933,15 @@ async def _render_serials_page(callback: CallbackQuery, page: int) -> None:
     if not _has_perm(callback.from_user.id, "can_view_lists"):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
-    serials = get_serials()
-    if not serials:
+    total = count_serials()
+    if total == 0:
         await callback.message.edit_text("Dramalar yo'q.", reply_markup=admin_back_keyboard())
         return
-    total = len(serials)
     total_pages = max(1, (total + SERIALS_PER_PAGE - 1) // SERIALS_PER_PAGE)
     page = max(0, min(page, total_pages - 1))
     start = page * SERIALS_PER_PAGE
     end = start + SERIALS_PER_PAGE
-    page_serials = serials[start:end]
+    page_serials = get_serials_page(SERIALS_PER_PAGE, start)
     codes = [int(item["code"]) for item in page_serials if item.get("code") is not None]
     views_map = get_serial_total_views_map(codes)
     header = f"Dramalar: {total} ta"
@@ -2994,16 +2984,15 @@ async def _render_admins_edit_page(callback: CallbackQuery, page: int) -> None:
 
 
 async def _render_vip_list(message: Message, page: int) -> None:
-    users = get_vip_users()
-    if not users:
+    total = count_vip_users()
+    if total == 0:
         await message.answer("VIP foydalanuvchilar yo'q.")
         return
-    total = len(users)
     total_pages = max(1, (total + VIP_LISTS_PER_PAGE - 1) // VIP_LISTS_PER_PAGE)
     page = max(0, min(page, total_pages - 1))
     start = page * VIP_LISTS_PER_PAGE
     end = start + VIP_LISTS_PER_PAGE
-    page_users = users[start:end]
+    page_users = get_vip_users_page(VIP_LISTS_PER_PAGE, start)
     user_map = {user["user_id"]: user.get("username") for user in get_users()}
     lines = [f"VIP foydalanuvchilar: {total} ta"]
     now = dt.datetime.utcnow()
@@ -5353,18 +5342,8 @@ async def cache_cleanup_loop() -> None:
 
 def _seconds_until_next_backup(now: dt.datetime, tz: ZoneInfo) -> float:
     local_now = now.astimezone(tz)
-    hours = [6, 16, 20]
-
-    candidates = []
-    for day_offset in (0, 1):
-        day = local_now.date() + dt.timedelta(days=day_offset)
-        for h in hours:
-            candidates.append(
-                dt.datetime(day.year, day.month, day.day, h, 0, 0, tzinfo=tz)
-            )
-
-    next_run = min(t for t in candidates if t > local_now)
-    return (next_run - local_now).total_seconds()
+    next_hour = (local_now + dt.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    return (next_hour - local_now).total_seconds()
 
 
 def _build_recommendation_target(day: dt.date, tz: ZoneInfo) -> dt.datetime:
@@ -5518,45 +5497,46 @@ async def _send_daily_recommendation(bot, tz: ZoneInfo) -> None:
         target = _build_recommendation_target(next_day, tz)
         set_setting(RECOMMENDATION_NEXT_RUN_KEY, target.isoformat())
         return
-    targets = _collect_broadcast_targets("all")
-    if not targets:
+    total_users = count_users()
+    if total_users == 0:
         return
-    rec_map = get_user_daily_recommendations(today)
     top_liked = get_top_liked_serials(50, include_vip=True)
     fallback_serial = top_liked[0] if top_liked else None
     serial_cache: dict[int, dict] = {}
     ok = 0
     failed = 0
     counter = 0
-    for user_id in targets:
-        if is_blocked_user(int(user_id)):
-            continue
-        serial_id = rec_map.get(int(user_id))
-        serial = None
-        if serial_id is not None:
-            serial = serial_cache.get(serial_id)
+    for batch in iter_user_ids():
+        rec_map = get_user_daily_recommendations_for_users(today, batch)
+        for user_id in batch:
+            if is_blocked_user(int(user_id)):
+                continue
+            serial_id = rec_map.get(int(user_id))
+            serial = None
+            if serial_id is not None:
+                serial = serial_cache.get(serial_id)
+                if serial is None:
+                    serial = get_serial_by_id(int(serial_id))
+                    if serial:
+                        serial_cache[int(serial_id)] = serial
             if serial is None:
-                serial = get_serial_by_id(int(serial_id))
-                if serial:
-                    serial_cache[int(serial_id)] = serial
-        if serial is None:
-            serial = fallback_serial
-        if not serial or serial.get("id") is None:
-            continue
-        try:
-            if await _send_serial_part_to_user(bot, int(user_id), int(serial["id"])):
-                ok += 1
-            else:
+                serial = fallback_serial
+            if not serial or serial.get("id") is None:
+                continue
+            try:
+                if await _send_serial_part_to_user(bot, int(user_id), int(serial["id"])):
+                    ok += 1
+                else:
+                    failed += 1
+            except TelegramAPIError as exc:
+                _log_event("recommend_failed", None, f"user_id={user_id} error={exc}")
                 failed += 1
-        except TelegramAPIError as exc:
-            _log_event("recommend_failed", None, f"user_id={user_id} error={exc}")
-            failed += 1
-        except Exception:
-            _log_event("recommend_failed", None, f"user_id={user_id} error=unknown")
-            failed += 1
-        counter += 1
-        if BROADCAST_BATCH_EVERY and BROADCAST_BATCH_SLEEP and counter % BROADCAST_BATCH_EVERY == 0:
-            await asyncio.sleep(BROADCAST_BATCH_SLEEP)
+            except Exception:
+                _log_event("recommend_failed", None, f"user_id={user_id} error=unknown")
+                failed += 1
+            counter += 1
+            if BROADCAST_BATCH_EVERY and BROADCAST_BATCH_SLEEP and counter % BROADCAST_BATCH_EVERY == 0:
+                await asyncio.sleep(BROADCAST_BATCH_SLEEP)
     set_setting(RECOMMENDATION_LAST_DATE_KEY, today)
     next_day = local_now.date() + dt.timedelta(days=1)
     target = _build_recommendation_target(next_day, tz)
@@ -6305,13 +6285,12 @@ async def recommendation_now_handler(message: Message):
         return
     tz = ZoneInfo(BACKUP_TZ)
     today = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc).astimezone(tz).date().isoformat()
-    rec_map = get_user_daily_recommendations(today)
-    targets = _collect_broadcast_targets("all")
-    if not targets:
+    total_users = count_users()
+    if total_users == 0:
         await message.answer("Foydalanuvchilar topilmadi.")
         return
     status = await message.answer(
-        f"Tavsiya yuborish boshlandi... 0/{len(targets)}\n"
+        f"Tavsiya yuborish boshlandi... 0/{total_users}\n"
         "Yuborildi: 0, xatolik: 0, o'tkazildi: 0"
     )
     ok = 0
@@ -6319,39 +6298,43 @@ async def recommendation_now_handler(message: Message):
     skipped = 0
     counter = 0
     last_update = time.monotonic()
-    total = len(targets)
-    for user_id in targets:
-        counter += 1
-        if is_blocked_user(int(user_id)):
-            skipped += 1
-        else:
-            serial_id = rec_map.get(int(user_id))
-            if not serial_id:
+    total = total_users
+    for batch in iter_user_ids():
+        rec_map = get_user_daily_recommendations_for_users(today, batch)
+        for user_id in batch:
+            counter += 1
+            if is_blocked_user(int(user_id)):
                 skipped += 1
             else:
-                try:
-                    if await _send_serial_part_to_user(message.bot, int(user_id), int(serial_id)):
-                        ok += 1
-                    else:
+                serial_id = rec_map.get(int(user_id))
+                if not serial_id:
+                    skipped += 1
+                else:
+                    try:
+                        if await _send_serial_part_to_user(
+                            message.bot, int(user_id), int(serial_id)
+                        ):
+                            ok += 1
+                        else:
+                            failed += 1
+                    except TelegramAPIError as exc:
+                        _log_event("recommend_failed", None, f"user_id={user_id} error={exc}")
                         failed += 1
-                except TelegramAPIError as exc:
-                    _log_event("recommend_failed", None, f"user_id={user_id} error={exc}")
-                    failed += 1
+                    except Exception:
+                        _log_event("recommend_failed", None, f"user_id={user_id} error=unknown")
+                        failed += 1
+            now = time.monotonic()
+            if counter % 20 == 0 or now - last_update >= 2.0:
+                try:
+                    await status.edit_text(
+                        f"Tavsiya yuborilmoqda... {counter}/{total}\n"
+                        f"Yuborildi: {ok}, xatolik: {failed}, o'tkazildi: {skipped}"
+                    )
+                    last_update = now
                 except Exception:
-                    _log_event("recommend_failed", None, f"user_id={user_id} error=unknown")
-                    failed += 1
-        now = time.monotonic()
-        if counter % 20 == 0 or now - last_update >= 2.0:
-            try:
-                await status.edit_text(
-                    f"Tavsiya yuborilmoqda... {counter}/{total}\n"
-                    f"Yuborildi: {ok}, xatolik: {failed}, o'tkazildi: {skipped}"
-                )
-                last_update = now
-            except Exception:
-                last_update = now
-        if BROADCAST_BATCH_EVERY and BROADCAST_BATCH_SLEEP and counter % BROADCAST_BATCH_EVERY == 0:
-            await asyncio.sleep(BROADCAST_BATCH_SLEEP)
+                    last_update = now
+            if BROADCAST_BATCH_EVERY and BROADCAST_BATCH_SLEEP and counter % BROADCAST_BATCH_EVERY == 0:
+                await asyncio.sleep(BROADCAST_BATCH_SLEEP)
     try:
         await status.edit_text(
             f"Tugadi. Yuborildi: {ok}, xatolik: {failed}, o'tkazildi: {skipped}"

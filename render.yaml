@@ -19,6 +19,12 @@ services:
         value: /data/bot.db
       - key: LOG_PATH
         value: /data/bot.log
+      - key: BACKUP_DIR
+        value: /data/backups
+      - key: AUTO_RESTORE_DB
+        value: "1"
+      - key: AUTO_RESTORE_ONLY_IF_NEWER
+        value: "1"
       - key: WEBAPP_ENABLED
         value: "0"
       - key: SOURCE_CHANNEL_ID
