@@ -203,6 +203,9 @@ RECOMMENDATION_WINDOW_END = 23
 RECOMMENDATION_PREPARED_DATE_KEY = "daily_reco_prepared_date"
 RECOMMENDATION_IDLE_SECONDS = 600
 LAST_ACTIVITY_AT_KEY = "last_activity_at"
+VIP_EXPIRED_NOTIFY_LAST_DATE_KEY = "vip_expired_last_date"
+VIP_EXPIRED_NOTIFY_HOUR = 7
+VIP_EXPIRED_NOTICE_MESSAGE_ID: dict[int, int] = {}
 SERIAL_UPLOAD_LOCKS: dict[int, asyncio.Lock] = {}
 SERIAL_UPLOAD_QUEUES: dict[int, asyncio.PriorityQueue] = {}
 SERIAL_UPLOAD_TASKS: dict[int, asyncio.Task] = {}
@@ -1313,6 +1316,43 @@ async def user_contact_callback(callback: CallbackQuery):
         "Adminlarga yuboriladigan xabarni yozing. Bekor qilish: Bekor",
         reply_markup=contact_admin_keyboard(),
     )
+
+
+@router.message(Command("contact"))
+async def user_contact_command(message: Message):
+    if not await ensure_subscribed(message):
+        return
+    CONTACT_ADMIN_SESSIONS.add(message.from_user.id)
+    await message.answer(
+        "Adminlarga yuboriladigan xabarni yozing. Bekor qilish: Bekor",
+        reply_markup=contact_admin_keyboard(),
+    )
+
+
+async def _forward_user_message_to_admins(message: Message, reason: str) -> None:
+    admins = get_admins()
+    if OWNER_ID and OWNER_ID not in admins:
+        admins.append(OWNER_ID)
+    username = f"@{message.from_user.username}" if message.from_user.username else "-"
+    full_name = " ".join(
+        part for part in [message.from_user.first_name, message.from_user.last_name] if part
+    )
+    name_text = full_name if full_name else "-"
+    header = (
+        "Foydalanuvchi xabari:\n"
+        f"user_id: {message.from_user.id}\n"
+        f"username: {username}\n"
+        f"name: {name_text}\n"
+        f"sabab: {reason}"
+    )
+    for admin_id in admins:
+        try:
+            header_msg = await message.bot.send_message(admin_id, header)
+            _remember_contact_reply(admin_id, header_msg.message_id, message.from_user.id)
+            copied = await message.copy_to(admin_id)
+            _remember_contact_reply(admin_id, copied.message_id, message.from_user.id)
+        except Exception:
+            continue
 
 
 @router.callback_query(F.data.startswith("vipjoin:"))
@@ -4305,28 +4345,7 @@ async def contact_admin_message_handler(message: Message):
         await message.answer("Bekor qilindi.", reply_markup=ReplyKeyboardRemove())
         await message.answer("Menyu:", reply_markup=user_keyboard())
         return
-    admins = get_admins()
-    if OWNER_ID and OWNER_ID not in admins:
-        admins.append(OWNER_ID)
-    username = f"@{message.from_user.username}" if message.from_user.username else "-"
-    full_name = " ".join(
-        part for part in [message.from_user.first_name, message.from_user.last_name] if part
-    )
-    name_text = full_name if full_name else "-"
-    header = (
-        "Foydalanuvchi xabari:\n"
-        f"user_id: {message.from_user.id}\n"
-        f"username: {username}\n"
-        f"name: {name_text}"
-    )
-    for admin_id in admins:
-        try:
-            header_msg = await message.bot.send_message(admin_id, header)
-            _remember_contact_reply(admin_id, header_msg.message_id, message.from_user.id)
-            copied = await message.copy_to(admin_id)
-            _remember_contact_reply(admin_id, copied.message_id, message.from_user.id)
-        except Exception:
-            continue
+    await _forward_user_message_to_admins(message, "contact")
     CONTACT_ADMIN_SESSIONS.discard(message.from_user.id)
     await message.answer("Xabaringiz adminlarga yuborildi.", reply_markup=ReplyKeyboardRemove())
     await message.answer("Menyu:", reply_markup=user_keyboard())
@@ -4351,6 +4370,23 @@ async def admin_reply_to_contact_handler(message: Message):
         await message.copy_to(target_id)
     except Exception:
         pass
+
+
+@router.message(
+    lambda message: (
+        message
+        and message.from_user
+        and message.reply_to_message
+        and VIP_EXPIRED_NOTICE_MESSAGE_ID.get(message.from_user.id)
+        == message.reply_to_message.message_id
+    )
+)
+async def vip_expired_reply_handler(message: Message) -> None:
+    if not await ensure_subscribed(message):
+        return
+    await _forward_user_message_to_admins(message, "vip_expired_reply")
+    VIP_EXPIRED_NOTICE_MESSAGE_ID.pop(message.from_user.id, None)
+    await message.answer("Xabaringiz adminlarga yuborildi.")
 
 
 @router.message(Command("usend"))
@@ -5316,8 +5352,10 @@ async def _send_log_file(message: Message) -> None:
 
 
 async def vip_reminder_loop(bot) -> None:
+    tz = ZoneInfo(BACKUP_TZ)
     while True:
         try:
+            await _run_vip_expired_notifications(bot, tz)
             await _run_vip_reminders(bot)
         except Exception:
             pass
@@ -5558,13 +5596,6 @@ async def _run_vip_reminders(bot) -> None:
         except Exception:
             continue
         days_left = (expires_at.date() - now.date()).days
-        if days_left < 0:
-            remove_vip_user(item["user_id"])
-            try:
-                await bot.send_message(item["user_id"], "VIP obuna muddati tugadi.")
-            except Exception:
-                pass
-            continue
         if days_left == 7 and not item.get("reminded_7d"):
             text = "VIP obuna muddati 7 kundan so'ng tugaydi."
             if price:
@@ -5592,6 +5623,56 @@ async def _run_vip_reminders(bot) -> None:
                 mark_vip_reminder(item["user_id"], 1)
             except Exception:
                 pass
+
+
+async def _run_vip_expired_notifications(bot, tz: ZoneInfo) -> None:
+    now_utc = dt.datetime.utcnow()
+    local_now = now_utc.astimezone(tz)
+    if local_now.hour < VIP_EXPIRED_NOTIFY_HOUR:
+        return
+    today = local_now.date().isoformat()
+    if get_setting(VIP_EXPIRED_NOTIFY_LAST_DATE_KEY) == today:
+        return
+    users = get_vip_users()
+    for item in users:
+        user_id = int(item["user_id"])
+        if is_blocked_user(user_id):
+            continue
+        try:
+            expires_at = dt.datetime.fromisoformat(item["expires_at"])
+        except Exception:
+            continue
+        expires_date = expires_at.date()
+        expires_at_local = dt.datetime(
+            expires_date.year,
+            expires_date.month,
+            expires_date.day,
+            VIP_EXPIRED_NOTIFY_HOUR,
+            0,
+            0,
+            tzinfo=tz,
+        )
+        if local_now < expires_at_local:
+            continue
+        remove_vip_user(user_id)
+        try:
+            sent = await bot.send_message(
+                user_id,
+                "VIP obuna muddati tugadi.\n"
+                "Savol bo'lsa adminlarga yozing: /contact",
+            )
+            VIP_EXPIRED_NOTICE_MESSAGE_ID[user_id] = sent.message_id
+        except Exception:
+            pass
+        if OWNER_ID and int(OWNER_ID) != user_id:
+            try:
+                await bot.send_message(
+                    int(OWNER_ID),
+                    f"VIP obuna tugadi: user_id={user_id} (muddati: {expires_date.isoformat()})",
+                )
+            except Exception:
+                pass
+    set_setting(VIP_EXPIRED_NOTIFY_LAST_DATE_KEY, today)
 
 
 def _is_vip_part_expired(created_at: Optional[str]) -> bool:
@@ -6029,6 +6110,44 @@ async def broadcast_handler(message: Message, command: CommandObject):
             "state": "await_attach",
         }
     await message.answer("Dramani biriktirasizmi?", reply_markup=_broadcast_attach_keyboard())
+
+
+@router.message(Command("send"))
+async def send_to_user_handler(message: Message, command: CommandObject):
+    if not _has_perm(message.from_user.id, "can_broadcast"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    raw = (command.args or "").strip()
+    if not raw:
+        await message.answer("Foydalanish: /send <user_id> <text> yoki reply bilan: /send <user_id>")
+        return
+    parts = raw.split(maxsplit=1)
+    try:
+        target_id = int(parts[0])
+    except ValueError:
+        await message.answer("user_id raqam bo'lishi kerak.")
+        return
+    if is_blocked_user(target_id):
+        await message.answer("Foydalanuvchi bloklangan.")
+        return
+    if message.reply_to_message:
+        try:
+            await message.reply_to_message.copy_to(target_id)
+            await message.answer("Yuborildi.")
+            _log_event("send_user_reply", message.from_user.id, f"target_id={target_id}")
+        except Exception:
+            await message.answer("Yuborib bo'lmadi.")
+        return
+    text = parts[1].strip() if len(parts) > 1 else ""
+    if not text:
+        await message.answer("Matn kiriting yoki reply bilan yuboring.")
+        return
+    try:
+        await message.bot.send_message(target_id, text)
+        await message.answer("Yuborildi.")
+        _log_event("send_user_text", message.from_user.id, f"target_id={target_id}")
+    except Exception:
+        await message.answer("Yuborib bo'lmadi.")
 
 
 @router.message(Command("cancel"))

@@ -16735,3 +16735,9 @@
 2026-04-27T10:09:19.267825 serial_part_sent user_id=5792951787 serial_id=500 part=8
 2026-04-27T10:09:22.743792 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=humble_student1 msg_type=ContentType.TEXT message_id=15815 text=/admin
 2026-04-27T10:09:27.672317 user_action user_id=5792951787 chat_id=5792951787 username=humble_student1 data=admin:stats message_id=15816
+2026-05-16T14:47:16.416590 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15870 text=/start
+2026-05-16T14:47:16.429926 user_start user_id=5792951787
+2026-05-16T14:48:20.662277 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15873 text=/admin
+2026-05-16T14:48:23.291048 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=admin:users message_id=15874
+2026-05-16T14:55:03.847945 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15875 text=/usend
+2026-05-16T14:55:37.475093 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15877 text=/usend 6499839380
