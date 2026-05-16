@@ -114,6 +114,7 @@ from app.db import (
     get_serial_rating_counts,
     get_serial_rating_like_counts_map,
     get_top_liked_serials,
+    get_latest_serials,
     rename_serial,
     record_user_serial_view,
     get_user_liked_serial_ids,
@@ -2211,7 +2212,7 @@ async def start_handler(message: Message, command: CommandObject):
             await message.answer(
                 "Guruhda foydalanish:\n"
                 "- /drama <nom|kod> yuboring\n"
-                "- 1-qism chiqadi va qismlar tugmalari chiqadi",
+                "- drama haqida ma'lumot va qismlar tugmalari chiqadi",
                 reply_markup=kb.as_markup(),
             )
 
@@ -2292,10 +2293,59 @@ async def help_handler(message: Message):
             "Buyruqlar:\n"
             "/serial <nom|kod> - dramani yuborish\n"
             "/search <nom> - drama qidirish\n"
+            "/new - yangi dramalar\n"
+            "/top - top dramalar\n"
             "/vip - VIP holatini ko'rish\n"
         )
     await message.answer(text)
     _log_event("admins_list", message.from_user.id)
+
+
+@router.message(Command("top"))
+async def top_handler(message: Message):
+    if not await ensure_subscribed(message):
+        return
+    include_vip = _include_vip_serials(message.from_user.id)
+    top = get_top_liked_serials(20, include_vip)
+    if not top:
+        await message.answer("Dramalar yo'q.")
+        return
+    serials = [
+        {"id": item["id"], "code": item["code"], "title": item["title"], "is_vip": item["is_vip"]}
+        for item in top
+    ]
+    lines = ["Top dramalar:"]
+    for idx, item in enumerate(top, start=1):
+        title = _pretty_title_text(item.get("title") or "-")
+        likes = int(item.get("likes") or 0)
+        lines.append(f"{idx}. {title} ({likes})")
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=user_serials_keyboard(serials, page=0, total_pages=1, sort_key="top"),
+    )
+
+
+@router.message(Command("new"))
+async def new_handler(message: Message):
+    if not await ensure_subscribed(message):
+        return
+    include_vip = _include_vip_serials(message.from_user.id)
+    latest = get_latest_serials(10, include_vip)
+    if not latest:
+        await message.answer("Dramalar yo'q.")
+        return
+    serials = [
+        {"id": item["id"], "code": item["code"], "title": item["title"], "is_vip": item["is_vip"]}
+        for item in latest
+    ]
+    lines = ["Yangi dramalar:"]
+    for idx, item in enumerate(latest, start=1):
+        title = _pretty_title_text(item.get("title") or "-")
+        lines.append(f"{idx}. {title}")
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=user_serials_keyboard(serials, page=0, total_pages=1, sort_key="new"),
+    )
 
 
 @router.message(Command("addadmin"))
@@ -4707,13 +4757,47 @@ async def _show_serial_parts(message: Message, serial_id: int) -> bool:
     part_numbers = [int(item["part"]) for item in parts if item.get("part") is not None]
     if not part_numbers:
         return False
-    first_part = min(part_numbers)
-    return await _send_serial_part(
-        message,
-        serial_id,
-        first_part,
-        part_numbers=part_numbers,
+    part_numbers_sorted = sorted(set(part_numbers))
+    parts_count = len(part_numbers_sorted)
+    share_link = (
+        await _get_share_link(
+            message.bot,
+            int(serial["code"]),
+            serial.get("title") or "",
+            parts_count,
+        )
+        if serial
+        else None
     )
+    part_link_prefix = None
+    if message.chat.type in {"group", "supergroup"} and serial:
+        part_link_prefix = await _get_start_link_with_payload(
+            message.bot,
+            f"{int(serial['code'])}_",
+        )
+    show_rating = message.chat.type not in {"group", "supergroup"}
+    likes_count, dislikes_count = get_serial_rating_counts(serial_id)
+    if serial and serial.get("is_vip"):
+        title = _pretty_title_text(f"💎 {serial.get('title') or '-'}")
+    else:
+        title = _pretty_title_text(serial.get("title") or "-") if serial else "-"
+    await message.answer(
+        f"Drama: {title}\nQismlar: {parts_count}",
+        reply_markup=serial_parts_keyboard(
+            serial_id,
+            part_numbers_sorted,
+            page=0,
+            per_page=SERIAL_PARTS_PER_PAGE,
+            share_link=share_link,
+            part_link_prefix=part_link_prefix,
+            show_rating=show_rating,
+            notify_enabled=_is_serial_notify_enabled(message.from_user.id, serial_id),
+            rating=get_serial_rating(message.from_user.id, serial_id),
+            likes_count=likes_count,
+            dislikes_count=dislikes_count,
+        ),
+    )
+    return True
 
 
 async def _send_serial_part(
@@ -4727,6 +4811,9 @@ async def _send_serial_part(
         return False
     caption = item.get("caption") or None
     serial = get_serial_by_id(serial_id)
+    if serial and serial.get("is_vip") and not _is_admin_user(message.from_user.id):
+        if not await _ensure_vip_access(message, serial):
+            return False
     if (
         serial
         and serial.get("is_vip")

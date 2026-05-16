@@ -736,6 +736,31 @@ def get_serials_page(limit: int, offset: int) -> List[Dict[str, object]]:
         return [dict(row) for row in cur.fetchall()]
 
 
+def get_latest_serials(limit: int, include_vip: bool) -> List[Dict[str, object]]:
+    where = "" if include_vip else "WHERE s.is_vip = 0"
+    with _connect() as conn:
+        cur = conn.execute(
+            f"""
+            SELECT
+                s.id,
+                s.code,
+                s.title,
+                s.is_vip,
+                s.created_at,
+                s.banner_file_id,
+                COALESCE(MAX(p.created_at), s.created_at) AS last_part_at
+            FROM serials AS s
+            LEFT JOIN serial_parts AS p ON p.serial_id = s.id
+            {where}
+            GROUP BY s.id
+            ORDER BY s.created_at DESC, s.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
 def count_serials_by_title(query: str, include_vip: bool) -> int:
     like = f"%{query}%"
     with _connect() as conn:

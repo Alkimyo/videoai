@@ -97,7 +97,6 @@ def user_keyboard():
     kb = InlineKeyboardBuilder()
     kb.button(text="Drama kodini yuborish", callback_data="user:sendcode")
     kb.button(text="Dramalar ro'yxati", callback_data="user:serials")
-    kb.button(text="Top dramalar", callback_data="user:toplikes")
     kb.button(text="Admin bilan bog'lanish", callback_data="user:contact")
     kb.button(text="VIP haqida", callback_data="user:vipinfo")
     kb.adjust(1)
