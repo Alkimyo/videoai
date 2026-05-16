@@ -1606,26 +1606,6 @@ def get_user_id_by_username(username: str) -> Optional[int]:
         return int(row["user_id"]) if row else None
 
 
-def get_user_id_by_username(username: str) -> Optional[int]:
-    clean = (username or "").strip().lstrip("@")
-    if not clean:
-        return None
-    with _connect() as conn:
-        cur = conn.execute(
-            """
-            SELECT user_id
-            FROM users
-            WHERE username IS NOT NULL
-              AND TRIM(username) != ''
-              AND LOWER(username) = LOWER(?)
-            LIMIT 1
-            """,
-            (clean,),
-        )
-        row = cur.fetchone()
-        return int(row["user_id"]) if row else None
-
-
 def set_setting(key: str, value: str) -> None:
     with _connect() as conn:
         conn.execute(

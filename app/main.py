@@ -178,8 +178,11 @@ async def set_bot_commands(bot: Bot) -> None:
     default_commands = [
         BotCommand(command="start", description="Botni ishga tushirish"),
         BotCommand(command="help", description="Yordam (yordam)"),
+        BotCommand(command="contact", description="Adminlarga yozish"),
         BotCommand(command="serial", description="Drama yuborish"),
         BotCommand(command="search", description="Drama qidirish"),
+        BotCommand(command="new", description="Yangi dramalar"),
+        BotCommand(command="top", description="Top dramalar"),
         BotCommand(command="drama", description="Drama yuborish (guruh)"),
     ]
     admin_commands = [

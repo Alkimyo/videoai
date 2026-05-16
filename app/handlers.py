@@ -140,6 +140,7 @@ from app.keyboards import (
     serial_cancel_keyboard,
     serial_flow_keyboard,
     serial_parts_keyboard,
+    serial_nav_keyboard,
     serials_list_keyboard,
     vip_info_keyboard,
     vip_duration_keyboard,
@@ -1061,10 +1062,23 @@ async def _ensure_vip_access(message: Message, serial: dict, user_id: Optional[i
     price = _get_vip_price()
     if price:
         await message.answer(
-            f"Bu drama VIP. Oylik narx: {price} so'm. Admin bilan bog'laning."
+            "Bu drama VIP.\n"
+            f"Oylik narx: {price} so'm.\n\n"
+            "VIPga qo'shilish uchun:\n"
+            "1. /start yuboring.\n"
+            "2. Chiqqan menyulardan VIP HAQIDA menyusini tanlang.\n"
+            "3. VIPga qo'shilishni bosing.\n"
+            "4. Ko'rsatilgan kartaga to'lov qiling va chekni yuboring."
         )
     else:
-        await message.answer("Bu drama VIP. Admin bilan bog'laning.")
+        await message.answer(
+            "Bu drama VIP.\n\n"
+            "VIPga qo'shilish uchun:\n"
+            "1. /start yuboring.\n"
+            "2. Chiqqan menyulardan VIP HAQIDA menyusini tanlang.\n"
+            "3. VIPga qo'shilishni bosing.\n"
+            "4. Ko'rsatilgan kartaga to'lov qiling va chekni yuboring."
+        )
     return False
 
 
@@ -1420,7 +1434,9 @@ async def user_toplikes_callback(callback: CallbackQuery):
 async def user_search_callback(callback: CallbackQuery):
     if not await ensure_subscribed_callback(callback):
         return
-    await callback.message.answer("Qidirish uchun /search buyrug'idan foydalaning.")
+    USER_SEARCH_SESSIONS.add(callback.from_user.id)
+    USER_SEARCH_RESULTS.pop(callback.from_user.id, None)
+    await callback.message.answer("Drama nomini yozing:", reply_markup=user_search_keyboard())
 
 
 @router.callback_query(F.data == "user:search_cancel")
@@ -2186,11 +2202,6 @@ async def start_handler(message: Message, command: CommandObject):
             if not serial:
                 await message.answer("Drama topilmadi.")
                 return
-            if part:
-                if await _send_serial_part(message, serial["id"], int(part)):
-                    return
-                await message.answer("Qism topilmadi.")
-                return
             if await _show_serial_parts(message, serial["id"]):
                 return
             await message.answer("Drama topilmadi.")
@@ -2200,7 +2211,8 @@ async def start_handler(message: Message, command: CommandObject):
     _clear_pending_start(message.from_user.id)
     banner = (
         "Qadrli dramshik sizni botimizda ko'rganimizdan xursandmiz 🙂\n"
-        "O'zingizga kerakli qismni tanlab contentlardan bahramand bo'ling."
+        "O'zingizga kerakli qismni tanlab contentlardan bahramand bo'ling.\n\n"
+        "Yordam uchun /help buyrug'idan foydalaning."
     )
     await message.answer(banner, reply_markup=user_keyboard())
     if message.chat.type == "private":
@@ -2291,11 +2303,16 @@ async def help_handler(message: Message):
     else:
         text = (
             "Buyruqlar:\n"
+            "Drama ko'rish: drama kodini yoki nomini yozing (masalan: 268)\n"
             "/serial <nom|kod> - dramani yuborish\n"
             "/search <nom> - drama qidirish\n"
             "/new - yangi dramalar\n"
             "/top - top dramalar\n"
             "/vip - VIP holatini ko'rish\n"
+            "/contact - adminlarga yozish\n\n"
+            "Misollar:\n"
+            "- 268\n"
+            "- /search queen\n"
         )
     await message.answer(text)
     _log_event("admins_list", message.from_user.id)
@@ -4861,18 +4878,11 @@ async def _send_serial_part(
             f"{int(serial['code'])}_",
         )
     show_rating = message.chat.type not in {"group", "supergroup"}
-    reply_markup = serial_parts_keyboard(
+    reply_markup = serial_nav_keyboard(
         serial_id,
         part_numbers_sorted or [part],
-        page=page,
-        per_page=SERIAL_PARTS_PER_PAGE,
-        share_link=share_link,
+        current_part=part,
         part_link_prefix=part_link_prefix,
-        show_rating=show_rating,
-        notify_enabled=_is_serial_notify_enabled(message.from_user.id, serial_id),
-        rating=get_serial_rating(message.from_user.id, serial_id),
-        likes_count=likes_count,
-        dislikes_count=dislikes_count,
     )
     source_chat_id = item.get("source_chat_id")
     source_message_id = item.get("source_message_id")

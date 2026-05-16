@@ -95,8 +95,8 @@ def admin_edit_list_keyboard(admins: Iterable[dict], page: int, total_pages: int
 
 def user_keyboard():
     kb = InlineKeyboardBuilder()
-    kb.button(text="Drama kodini yuborish", callback_data="user:sendcode")
     kb.button(text="Dramalar ro'yxati", callback_data="user:serials")
+    kb.button(text="Drama qidirish", callback_data="user:search")
     kb.button(text="Admin bilan bog'lanish", callback_data="user:contact")
     kb.button(text="VIP haqida", callback_data="user:vipinfo")
     kb.adjust(1)
@@ -201,6 +201,54 @@ def serial_parts_keyboard(
         )
     if share_link:
         kb.row(InlineKeyboardButton(text="Ulashish", url=share_link))
+    return kb.as_markup()
+
+
+def serial_nav_keyboard(
+    serial_id: int,
+    parts: Iterable[int],
+    current_part: int,
+    part_link_prefix: Optional[str] = None,
+):
+    kb = InlineKeyboardBuilder()
+    parts_sorted = sorted({int(p) for p in parts})
+    prev_part = None
+    next_part = None
+    try:
+        idx = parts_sorted.index(int(current_part))
+    except ValueError:
+        idx = -1
+    if idx > 0:
+        prev_part = parts_sorted[idx - 1]
+    if idx >= 0 and idx + 1 < len(parts_sorted):
+        next_part = parts_sorted[idx + 1]
+    nav_buttons: list[InlineKeyboardButton] = []
+    if prev_part is not None:
+        if part_link_prefix:
+            nav_buttons.append(
+                InlineKeyboardButton(text="⬅️ Oldingi", url=f"{part_link_prefix}{prev_part}")
+            )
+        else:
+            nav_buttons.append(
+                InlineKeyboardButton(
+                    text="⬅️ Oldingi",
+                    callback_data=f"serialpart:{serial_id}:{prev_part}",
+                )
+            )
+    if next_part is not None:
+        if part_link_prefix:
+            nav_buttons.append(
+                InlineKeyboardButton(text="➡️ Keyingi", url=f"{part_link_prefix}{next_part}")
+            )
+        else:
+            nav_buttons.append(
+                InlineKeyboardButton(
+                    text="➡️ Keyingi",
+                    callback_data=f"serialpart:{serial_id}:{next_part}",
+                )
+            )
+    if nav_buttons:
+        kb.row(*nav_buttons)
     return kb.as_markup()
 
 
