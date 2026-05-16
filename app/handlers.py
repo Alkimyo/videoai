@@ -4883,6 +4883,11 @@ async def _send_serial_part(
         part_numbers_sorted or [part],
         current_part=part,
         part_link_prefix=part_link_prefix,
+        show_rating=show_rating,
+        notify_enabled=_is_serial_notify_enabled(message.from_user.id, serial_id),
+        rating=get_serial_rating(message.from_user.id, serial_id),
+        likes_count=likes_count,
+        dislikes_count=dislikes_count,
     )
     source_chat_id = item.get("source_chat_id")
     source_message_id = item.get("source_message_id")

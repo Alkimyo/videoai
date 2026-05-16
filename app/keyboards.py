@@ -209,6 +209,11 @@ def serial_nav_keyboard(
     parts: Iterable[int],
     current_part: int,
     part_link_prefix: Optional[str] = None,
+    show_rating: bool = True,
+    notify_enabled: bool = True,
+    rating: int = 0,
+    likes_count: int = 0,
+    dislikes_count: int = 0,
 ):
     kb = InlineKeyboardBuilder()
     parts_sorted = sorted({int(p) for p in parts})
@@ -249,6 +254,34 @@ def serial_nav_keyboard(
             )
     if nav_buttons:
         kb.row(*nav_buttons)
+    if show_rating:
+        likes_count = max(0, int(likes_count or 0))
+        dislikes_count = max(0, int(dislikes_count or 0))
+        like_label = "👍✅" if rating == 1 else "👍"
+        dislike_label = "👎✅" if rating == -1 else "👎"
+        notify_label = "🔔" if notify_enabled else "🔕"
+        kb.row(
+            InlineKeyboardButton(
+                text=f"{like_label} {likes_count}",
+                callback_data=f"user:rate:1:{serial_id}",
+            ),
+            InlineKeyboardButton(
+                text=notify_label,
+                callback_data="noop"
+                if part_link_prefix
+                else f"serialnotify:toggle:{serial_id}:0",
+            ),
+            InlineKeyboardButton(
+                text=f"{dislike_label} {dislikes_count}",
+                callback_data=f"user:rate:-1:{serial_id}",
+            ),
+        )
+        kb.row(
+            InlineKeyboardButton(
+                text="Nima uchun kerak?",
+                callback_data="noop" if part_link_prefix else f"serialnotify:info:{serial_id}",
+            )
+        )
     return kb.as_markup()
 
 
