@@ -1549,12 +1549,13 @@ async def user_like_toggle_callback(callback: CallbackQuery):
     if not await ensure_subscribed_callback(callback):
         return
     parts = callback.data.split(":")
-    if len(parts) != 4:
+    if len(parts) not in {4, 5}:
         await callback.answer()
         return
     try:
         value = int(parts[2])
         serial_id = int(parts[3])
+        current_part = int(parts[4]) if len(parts) == 5 else None
     except ValueError:
         await callback.answer()
         return
@@ -1575,23 +1576,36 @@ async def user_like_toggle_callback(callback: CallbackQuery):
         await callback.answer()
         return
     likes_count, dislikes_count = get_serial_rating_counts(serial_id)
-    share_link = await _get_share_link(
-        callback.message.bot,
-        int(serial.get("code")),
-        serial.get("title") or "",
-        len(part_numbers),
-    )
-    reply_markup = serial_parts_keyboard(
-        serial_id,
-        part_numbers,
-        page=0,
-        per_page=SERIAL_PARTS_PER_PAGE,
-        share_link=share_link,
-        notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
-        rating=get_serial_rating(callback.from_user.id, serial_id),
-        likes_count=likes_count,
-        dislikes_count=dislikes_count,
-    )
+    if current_part is not None:
+        reply_markup = serial_nav_keyboard(
+            serial_id,
+            part_numbers,
+            current_part=current_part,
+            part_link_prefix=None,
+            show_rating=True,
+            notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
+            rating=get_serial_rating(callback.from_user.id, serial_id),
+            likes_count=likes_count,
+            dislikes_count=dislikes_count,
+        )
+    else:
+        share_link = await _get_share_link(
+            callback.message.bot,
+            int(serial.get("code")),
+            serial.get("title") or "",
+            len(part_numbers),
+        )
+        reply_markup = serial_parts_keyboard(
+            serial_id,
+            part_numbers,
+            page=0,
+            per_page=SERIAL_PARTS_PER_PAGE,
+            share_link=share_link,
+            notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
+            rating=get_serial_rating(callback.from_user.id, serial_id),
+            likes_count=likes_count,
+            dislikes_count=dislikes_count,
+        )
     await _safe_edit_reply_markup(
         callback.message.bot,
         callback.message.chat.id,
@@ -6598,12 +6612,17 @@ async def serial_notify_callback(callback: CallbackQuery):
         except Exception:
             pass
         return
-    if action != "toggle":
+    if action not in {"toggle", "togglep"}:
         await callback.answer("Xatolik.", show_alert=True)
         return
     page = 0
-    if len(parts) >= 4 and parts[3].isdigit():
-        page = int(parts[3])
+    current_part = None
+    if action == "toggle":
+        if len(parts) >= 4 and parts[3].isdigit():
+            page = int(parts[3])
+    else:
+        if len(parts) >= 4 and parts[3].isdigit():
+            current_part = int(parts[3])
     current = _is_serial_notify_enabled(callback.from_user.id, serial_id)
     set_serial_notification_muted(callback.from_user.id, serial_id, 0 if not current else 1)
     serial = get_serial_by_id(serial_id)
@@ -6621,23 +6640,36 @@ async def serial_notify_callback(callback: CallbackQuery):
     if not part_numbers:
         return
     likes_count, dislikes_count = get_serial_rating_counts(serial_id)
-    share_link = await _get_share_link(
-        callback.message.bot,
-        int(serial.get("code")),
-        serial.get("title") or "",
-        len(part_numbers),
-    )
-    reply_markup = serial_parts_keyboard(
-        serial_id,
-        part_numbers,
-        page=page,
-        per_page=SERIAL_PARTS_PER_PAGE,
-        share_link=share_link,
-        notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
-        rating=get_serial_rating(callback.from_user.id, serial_id),
-        likes_count=likes_count,
-        dislikes_count=dislikes_count,
-    )
+    if current_part is not None:
+        reply_markup = serial_nav_keyboard(
+            serial_id,
+            part_numbers,
+            current_part=current_part,
+            part_link_prefix=None,
+            show_rating=True,
+            notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
+            rating=get_serial_rating(callback.from_user.id, serial_id),
+            likes_count=likes_count,
+            dislikes_count=dislikes_count,
+        )
+    else:
+        share_link = await _get_share_link(
+            callback.message.bot,
+            int(serial.get("code")),
+            serial.get("title") or "",
+            len(part_numbers),
+        )
+        reply_markup = serial_parts_keyboard(
+            serial_id,
+            part_numbers,
+            page=page,
+            per_page=SERIAL_PARTS_PER_PAGE,
+            share_link=share_link,
+            notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
+            rating=get_serial_rating(callback.from_user.id, serial_id),
+            likes_count=likes_count,
+            dislikes_count=dislikes_count,
+        )
     await _safe_edit_reply_markup(
         callback.message.bot,
         callback.message.chat.id,

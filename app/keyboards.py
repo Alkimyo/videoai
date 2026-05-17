@@ -263,17 +263,17 @@ def serial_nav_keyboard(
         kb.row(
             InlineKeyboardButton(
                 text=f"{like_label} {likes_count}",
-                callback_data=f"user:rate:1:{serial_id}",
+                callback_data=f"user:rate:1:{serial_id}:{int(current_part)}",
             ),
             InlineKeyboardButton(
                 text=notify_label,
                 callback_data="noop"
                 if part_link_prefix
-                else f"serialnotify:toggle:{serial_id}:0",
+                else f"serialnotify:togglep:{serial_id}:{int(current_part)}",
             ),
             InlineKeyboardButton(
                 text=f"{dislike_label} {dislikes_count}",
-                callback_data=f"user:rate:-1:{serial_id}",
+                callback_data=f"user:rate:-1:{serial_id}:{int(current_part)}",
             ),
         )
         kb.row(
