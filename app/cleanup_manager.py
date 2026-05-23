@@ -9,30 +9,30 @@ logger = logging.getLogger(__name__)
 
 
 class SessionCleanupManager:
-    """Markaziylashtirilgan session cleanup menejeri"""
+    """Markaziylashtirilgan session cleanup menejeri - har bir session type uchun TTL"""
     
     # TTL konfiguratsiya (sekundda)
     CONFIG = {
-        # Admin va editor sessiyalari - 1 soat
+        # Admin va editor sessiyalari - 1 soat (3600 sec)
         "ADMIN_ADD_SESSIONS": 3600,
         "SERIAL_RENAME_SESSIONS": 3600,
         "SERIAL_BANNER_SESSIONS": 3600,
-        "ADMIN_PERMISSION_LABELS": 3600,
+        "LOG_QUERY_ADMINS": 3600,
         
-        # Import sessiyalari - 2 soat
+        # Import sessiyalari - 2 soat (7200 sec)
         "IMPORT_SESSIONS": 7200,
         
-        # Restore DB sessiyalari - 2 soat
+        # Restore DB sessiyalari - 2 soat (7200 sec)
         "RESTORE_DB_SESSIONS": 7200,
         
-        # Post sessiyalari - 1 soat
+        # Post sessiyalari - 1 soat (3600 sec)
         "POST_SESSIONS": 3600,
         
-        # Broadcast sessiyalari - 30 minut
+        # Broadcast sessiyalari - 30 minut (1800 sec)
         "BROADCAST_SESSIONS": 1800,
         "BROADCAST_TEXT_SESSIONS": 1800,
         
-        # VIP sessiyalari - 30 minut
+        # VIP sessiyalari - 30 minut (1800 sec)
         "VIP_ADD_SESSIONS": 1800,
         "VIP_PRICE_SESSIONS": 1800,
         "VIP_MESSAGE_SESSIONS": 1800,
@@ -40,61 +40,50 @@ class SessionCleanupManager:
         "VIP_REJECT_SESSIONS": 1800,
         "VIP_PAYMENT_SESSIONS": 1800,
         
-        # User sessiyalari - 30 minut
+        # User sessiyalari - 30 minut (1800 sec)
         "USER_SEARCH_SESSIONS": 1800,
         "USER_SEARCH_RESULTS": 1800,
         "USER_SERIALS_LIST": 1800,
         
-        # Contact sessiyalari - 30 minut
+        # Contact sessiyalari - 30 minut (1800 sec)
         "CONTACT_ADMIN_SESSIONS": 1800,
-        "CONTACT_REPLY_MAP": 3600,
-        "CONTACT_REPLY_ORDER": 3600,
-        
-        # Log sessiyalari - 1 soat
-        "LOG_QUERY_ADMINS": 3600,
-        
-        # Admin user message - 30 minut
         "ADMIN_USER_MESSAGE_SESSIONS": 1800,
         
-        # VIP Receipt - 24 soat
+        # VIP Receipt - 24 soat (86400 sec)
         "VIP_RECEIPT_APPROVED": 86400,
         "VIP_RECEIPT_REJECTED": 86400,
         "VIP_RECEIPT_MESSAGES": 86400,
+        "VIP_EXPIRED_NOTICE_MESSAGE_ID": 86400,
         
-        # Pending start codes - 24 soat (kutish vaqti)
+        # Pending start codes - 24 soat (86400 sec)
         "PENDING_START_CODES": 86400,
         
-        # Upload sessiyalari - 6 soat
+        # Upload sessiyalari - 6 soat (21600 sec)
         "SERIAL_UPLOAD_LOCKS": 21600,
         "SERIAL_UPLOAD_QUEUES": 21600,
         "SERIAL_UPLOAD_TASKS": 21600,
         "SERIAL_UPLOAD_COUNTERS": 21600,
         "SERIAL_UPLOAD_NEXT_PART": 21600,
-        
-        # Group spam tracker - cleanup interval 10 minut
-        "GROUP_SPAM_TRACKER": 600,
-        
-        # VIP notice - 24 soat
-        "VIP_EXPIRED_NOTICE_MESSAGE_ID": 86400,
     }
     
     def __init__(self):
         self.registered_objects = {}
-        self.timestamps = {}  # user_id -> timestamp mappings
+        self.timestamps = {}  # (name, key) -> timestamp mappings
         self.loop_task = None
     
     def register(self, name: str, obj: Any) -> None:
         """Ob'ektni roʻyxatga ol"""
         if name not in self.CONFIG:
-            logger.warning(f"Unknown session type: {name}")
+            logger.warning(f"Unknown session type: {name}, TTL ni qo'shish kerak")
             return
         self.registered_objects[name] = obj
-        logger.debug(f"Registered session: {name}")
+        logger.debug(f"Registered session: {name} (TTL: {self.CONFIG[name]}s)")
     
     async def cleanup(self) -> None:
         """Barcha sessiyalarni tozala"""
         now = time.time()
         cleaned_count = 0
+        cleaned_details = {}
         
         for name, obj in self.registered_objects.items():
             ttl = self.CONFIG.get(name, 3600)
@@ -102,18 +91,19 @@ class SessionCleanupManager:
             try:
                 if isinstance(obj, dict):
                     cleaned = await self._cleanup_dict(obj, name, now, ttl)
-                    cleaned_count += cleaned
                 elif isinstance(obj, set):
                     cleaned = await self._cleanup_set(obj, name, now, ttl)
-                    cleaned_count += cleaned
-                elif isinstance(obj, deque):
-                    cleaned = await self._cleanup_deque(obj, name, now, ttl)
-                    cleaned_count += cleaned
+                else:
+                    cleaned = 0
+                
+                cleaned_count += cleaned
+                if cleaned > 0:
+                    cleaned_details[name] = cleaned
             except Exception as e:
                 logger.error(f"Error cleaning {name}: {e}")
         
         if cleaned_count > 0:
-            logger.info(f"Cleaned {cleaned_count} expired sessions")
+            logger.info(f"Cleaned {cleaned_count} expired sessions: {cleaned_details}")
     
     async def _cleanup_dict(self, session_dict: dict, name: str, 
                            now: float, ttl: int) -> int:
@@ -121,33 +111,29 @@ class SessionCleanupManager:
         cleaned = 0
         keys_to_delete = []
         
-        for key, value in session_dict.items():
+        for key, value in list(session_dict.items()):
             timestamp = None
             
-            # Turli session turlariga qarab timestamp topish
-            if name == "ADMIN_ADD_SESSIONS":
-                timestamp = self.timestamps.get((name, key))
-            elif name == "PENDING_START_CODES":
-                # Format: (code, part, timestamp)
+            # PENDING_START_CODES: (code, part, timestamp)
+            if name == "PENDING_START_CODES":
                 if isinstance(value, tuple) and len(value) >= 3:
                     timestamp = value[2]
-            elif name == "CONTACT_REPLY_MAP":
-                # Contact reply sessiyasi - maxfiy adr
-                continue  # Kontrollangan qo'shish/olib tashlash
-            elif name == "VIP_RECEIPT_MESSAGES":
-                timestamp = self.timestamps.get((name, key))
+            
+            # Sessiya dict'da created_at vardi
             elif isinstance(value, dict) and "created_at" in value:
-                # Sessiya dict'da created_at vardi
                 try:
                     created = dt.datetime.fromisoformat(value["created_at"])
                     timestamp = created.timestamp()
-                except:
+                except Exception:
                     timestamp = now - ttl - 1
-            elif isinstance(value, dict) and "timestamp" in value:
-                timestamp = value.get("timestamp")
+            
+            # VIP RECEIPT MESSAGES listni tracking
+            elif isinstance(value, list):
+                timestamp = self.timestamps.get((name, key), now)
+            
+            # Standart TTL tracking
             else:
-                # Standart TTL
-                timestamp = self.timestamps.get((name, key), now - ttl - 1)
+                timestamp = self.timestamps.get((name, key), now)
             
             if timestamp and (now - timestamp) > ttl:
                 keys_to_delete.append(key)
@@ -178,30 +164,19 @@ class SessionCleanupManager:
         
         return cleaned
     
-    async def _cleanup_deque(self, session_deque: deque, name: str, 
-                           now: float, ttl: int) -> int:
-        """Deque sessiyalarni tozala"""
-        cleaned = 0
-        
-        if name == "CONTACT_REPLY_ORDER":
-            # Deque automatik maxlen ga qarab truncate qiladi
-            # Qo'shimcha cleanup kerak emas
-            return 0
-        
-        # Boshqa deque tiplari uchun
-        return cleaned
-    
     def track_session_start(self, name: str, user_id: int) -> None:
         """Session boshlanganini qayd etish"""
         self.timestamps[(name, user_id)] = time.time()
+        logger.debug(f"Session started: {name}#{user_id}")
     
     def track_session_end(self, name: str, user_id: int) -> None:
         """Session tugaganini qayd etish"""
         self.timestamps.pop((name, user_id), None)
+        logger.debug(f"Session ended: {name}#{user_id}")
     
     async def cleanup_loop(self) -> None:
-        """Doimiy cleanup loop"""
-        logger.info("Session cleanup loop started")
+        """Doimiy cleanup loop - har 5 minutda tekshira"""
+        logger.info("Session cleanup loop started (interval: 5 min)")
         while True:
             try:
                 await asyncio.sleep(300)  # 5 minutda bir cleanup
@@ -213,6 +188,7 @@ class SessionCleanupManager:
         """Cleanup loopni boshlash"""
         if self.loop_task is None or self.loop_task.done():
             self.loop_task = asyncio.create_task(self.cleanup_loop())
+            logger.info("Cleanup loop task started")
     
     async def stop_cleanup_loop(self) -> None:
         """Cleanup loopni to'xtatish"""
@@ -221,8 +197,25 @@ class SessionCleanupManager:
             try:
                 await self.loop_task
             except asyncio.CancelledError:
-                pass
+                logger.info("Cleanup loop stopped")
             self.loop_task = None
+    
+    def get_stats(self) -> dict:
+        """Cleanup statistic"""
+        stats = {
+            "total_registered": len(self.registered_objects),
+            "total_tracked_timestamps": len(self.timestamps),
+            "configs": self.CONFIG,
+            "registered_objects": {
+                name: {
+                    "type": type(obj).__name__,
+                    "ttl": self.CONFIG.get(name, "unknown"),
+                    "size": len(obj) if hasattr(obj, '__len__') else "N/A"
+                }
+                for name, obj in self.registered_objects.items()
+            }
+        }
+        return stats
 
 
 # Global cleanup menejeri
