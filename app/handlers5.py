@@ -168,61 +168,105 @@ from app.userbot import (
     set_userbot_api_id,
     set_userbot_session,
 )
-from app.handlers_vip import (
-    VIP_CARD_NUMBER_KEY,
-    VIP_CARD_OWNER_KEY,
-    VIP_MESSAGE_KEY,
-    VIP_PRICE_KEY,
-    get_vip_card_details as _get_vip_card_details,
-    get_vip_message as _get_vip_message,
-    get_vip_price as _get_vip_price,
-    include_vip_serials as _include_vip_serials,
-    is_vip_user as _is_vip_user,
-    send_vip_info as _send_vip_info,
-    send_vip_required as _send_vip_required,
-    update_receipt_status as _update_receipt_status,
-    vip_receipt_keyboard as _vip_receipt_keyboard,
-    visible_serial_parts_for_user as _visible_serial_parts_for_user,
-)
 
-from app.handlers_sessions import (
-    ADMIN_ADD_SESSIONS,
-    ADMIN_USER_MESSAGE_SESSIONS,
-    BROADCAST_SESSIONS,
-    BROADCAST_TEXT_SESSIONS,
-    CONTACT_ADMIN_SESSIONS,
-    CONTACT_REPLY_MAP,
-    CONTACT_REPLY_ORDER,
-    GROUP_SPAM_TRACKER,
-    IMPORT_SESSIONS,
-    IMPORT_TASKS,
-    LOG_QUERY_ADMINS,
-    PENDING_START_CODES,
-    POST_SESSIONS,
-    RESTORE_DB_SESSIONS,
-    SERIAL_BANNER_SESSIONS,
-    SERIAL_RENAME_SESSIONS,
-    SERIAL_UPLOAD_COUNTERS,
-    SERIAL_UPLOAD_LOCKS,
-    SERIAL_UPLOAD_NEXT_PART,
-    SERIAL_UPLOAD_QUEUES,
-    SERIAL_UPLOAD_TASKS,
-    USER_SEARCH_RESULTS,
-    USER_SEARCH_SESSIONS,
-    USER_SERIALS_LIST,
-    VIP_ADD_SESSIONS,
-    VIP_CARD_SESSIONS,
-    VIP_EXPIRED_NOTICE_MESSAGE_ID,
-    VIP_MESSAGE_SESSIONS,
-    VIP_PAYMENT_SESSIONS,
-    VIP_PRICE_SESSIONS,
-    VIP_RECEIPT_APPROVED,
-    VIP_RECEIPT_MESSAGES,
-    VIP_RECEIPT_REJECTED,
-    VIP_REJECT_SESSIONS,
-    cleanup_sessions,
-)
 
+# ✅ ADD THIS TO handlers.py (after imports, before ADMIN_ADD_SESSIONS):
+
+import time
+from typing import Any, Optional, Dict
+from collections import defaultdict
+
+class SessionManager:
+    """Manages user sessions with automatic expiration"""
+    
+    def __init__(self, timeout_seconds: int = 3600):
+        """
+        Args:
+            timeout_seconds: How long before session expires (default: 1 hour)
+        """
+        self.sessions: Dict[int, Any] = {}
+        self.timestamps: Dict[int, float] = {}
+        self.timeout = timeout_seconds
+    
+    def set(self, user_id: int, data: Any) -> None:
+        """Store session data"""
+        self.sessions[user_id] = data
+        self.timestamps[user_id] = time.time()
+    
+    def get(self, user_id: int) -> Optional[Any]:
+        """Get session data, auto-expire if needed"""
+        if user_id not in self.sessions:
+            return None
+        
+        # Check if expired
+        if time.time() - self.timestamps[user_id] > self.timeout:
+            self.delete(user_id)
+            return None
+        
+        return self.sessions[user_id]
+    
+    def delete(self, user_id: int) -> None:
+        """Delete session"""
+        self.sessions.pop(user_id, None)
+        self.timestamps.pop(user_id, None)
+    
+    def cleanup_expired(self) -> int:
+        """Remove all expired sessions, return count"""
+        now = time.time()
+        expired = [
+            uid for uid, ts in self.timestamps.items()
+            if now - ts > self.timeout
+        ]
+        for uid in expired:
+            self.delete(uid)
+        return len(expired)
+    
+    def exists(self, user_id: int) -> bool:
+        """Check if session exists and not expired"""
+        return self.get(user_id) is not None
+    
+    def clear_all(self) -> None:
+        """Clear all sessions"""
+        self.sessions.clear()
+        self.timestamps.clear()
+
+
+
+
+
+
+
+
+GLOBAL_SESSION_TIMEOUT = 3600
+SESSION_ACTIVITY: dict[str, dict[object, float]] = {}
+
+def _touch_session(bucket_name: str, key: object) -> None:
+    bucket = SESSION_ACTIVITY.setdefault(bucket_name, {})
+    bucket[key] = time.time()
+
+def _clear_session_activity(bucket_name: str, key: object) -> None:
+    bucket = SESSION_ACTIVITY.get(bucket_name)
+    if bucket:
+        bucket.pop(key, None)
+
+def _cleanup_session_bucket(bucket_name: str, bucket, timeout: int = GLOBAL_SESSION_TIMEOUT) -> int:
+    activity = SESSION_ACTIVITY.setdefault(bucket_name, {})
+    now = time.time()
+    removed = 0
+    for key in list(bucket.keys() if hasattr(bucket, "keys") else bucket):
+        ts = activity.get(key, 0)
+        if ts and now - ts <= timeout:
+            continue
+        try:
+            if hasattr(bucket, "pop"):
+                bucket.pop(key, None)
+            elif hasattr(bucket, "discard"):
+                bucket.discard(key)
+            removed += 1
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
+        activity.pop(key, None)
+    return removed
 
 
 SERIAL_PARTS_PER_PAGE = 30
@@ -230,7 +274,33 @@ SERIALS_PER_PAGE = 20
 USERS_PER_PAGE = 20
 ADMINS_PER_PAGE = 20
 USER_SERIALS_PER_PAGE = 30
+LOG_QUERY_ADMINS: set[int] = set()
+ADMIN_ADD_SESSIONS: dict[int, dict[str, object]] = {}
+RESTORE_DB_SESSIONS: dict[int, dict[str, object]] = {}
+POST_SESSIONS: dict[int, dict[str, object]] = {}
+USER_SEARCH_SESSIONS: set[int] = set()
+USER_SEARCH_RESULTS: dict[int, list[dict]] = {}
+USER_SERIALS_LIST: dict[int, dict[str, object]] = {}
+VIP_ADD_SESSIONS: dict[int, int] = {}
+VIP_PRICE_KEY = "vip_monthly_price"
+VIP_PRICE_SESSIONS: set[int] = set()
 VIP_LISTS_PER_PAGE = 20
+VIP_MESSAGE_KEY = "vip_message"
+VIP_MESSAGE_SESSIONS: set[int] = set()
+VIP_CARD_NUMBER_KEY = "vip_card_number"
+VIP_CARD_OWNER_KEY = "vip_card_owner"
+VIP_CARD_SESSIONS: set[int] = set()
+VIP_PAYMENT_SESSIONS: set[int] = set()
+VIP_REJECT_SESSIONS: dict[int, int] = {}
+CONTACT_ADMIN_SESSIONS: set[int] = set()
+CONTACT_REPLY_MAP: dict[tuple[int, int], int] = {}
+CONTACT_REPLY_ORDER: deque[tuple[int, int]] = deque(maxlen=CONTACT_REPLY_MAXLEN)
+BROADCAST_SESSIONS: dict[int, dict[str, object]] = {}
+BROADCAST_TEXT_SESSIONS: set[int] = set()
+ADMIN_USER_MESSAGE_SESSIONS: dict[int, dict[str, int]] = {}
+VIP_RECEIPT_APPROVED: dict[int, int] = {}
+VIP_RECEIPT_REJECTED: dict[int, int] = {}
+VIP_RECEIPT_MESSAGES: dict[int, list[tuple[int, int]]] = {}
 RECOMMENDATION_LAST_DATE_KEY = "daily_reco_last_date"
 RECOMMENDATION_NEXT_RUN_KEY = "daily_reco_next_run"
 RECOMMENDATION_WINDOW_START = 19
@@ -240,6 +310,14 @@ RECOMMENDATION_IDLE_SECONDS = 600
 LAST_ACTIVITY_AT_KEY = "last_activity_at"
 VIP_EXPIRED_NOTIFY_LAST_DATE_KEY = "vip_expired_last_date"
 VIP_EXPIRED_NOTIFY_HOUR = 7
+VIP_EXPIRED_NOTICE_MESSAGE_ID: dict[int, int] = {}
+SERIAL_UPLOAD_LOCKS: dict[int, asyncio.Lock] = {}
+SERIAL_UPLOAD_QUEUES: dict[int, asyncio.PriorityQueue] = {}
+SERIAL_UPLOAD_TASKS: dict[int, asyncio.Task] = {}
+SERIAL_UPLOAD_COUNTERS: dict[int, int] = {}
+SERIAL_UPLOAD_NEXT_PART: dict[tuple[int, int], int] = {}
+IMPORT_TASKS: dict[int, asyncio.Task] = {}
+IMPORT_SESSIONS: dict[int, dict[str, object]] = {}
 ADMIN_PERMISSION_LABELS = {
     "can_manage_admins": "Adminlarni boshqarish",
     "can_manage_channels": "Kanallarni boshqarish",
@@ -254,6 +332,10 @@ ADMIN_PERMISSION_LABELS = {
     "can_backup": "Backup olish",
 }
 
+SERIAL_RENAME_SESSIONS: dict[int, int] = {}
+SERIAL_BANNER_SESSIONS: dict[int, int] = {}
+PENDING_START_CODES: dict[int, tuple[int, Optional[int], float]] = {}
+GROUP_SPAM_TRACKER: dict[tuple[int, int], deque[float]] = {}
 GROUP_SPAM_WINDOW = 60
 GROUP_SPAM_LIMIT = 3
 GROUP_MUTE_SECONDS = 120
@@ -322,6 +404,26 @@ def _format_perm_inline(perms: dict[str, int]) -> str:
     return ", ".join(parts)
 
 
+def _get_vip_price() -> Optional[int]:
+    raw = get_setting(VIP_PRICE_KEY)
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _get_vip_message() -> Optional[str]:
+    return get_setting(VIP_MESSAGE_KEY)
+
+
+def _get_vip_card_details() -> tuple[str, str]:
+    number = get_setting(VIP_CARD_NUMBER_KEY) or ""
+    owner = get_setting(VIP_CARD_OWNER_KEY) or ""
+    return number, owner
+
+
 def _new_drama_broadcast_keyboard(kind: str, serial_id: int):
     kb = InlineKeyboardBuilder()
     if kind == "all":
@@ -341,6 +443,14 @@ def _new_part_broadcast_keyboard(kind: str, serial_id: int, part: int):
         kb.button(text="VIP obunachilarga yuborish", callback_data=f"newpart:vip:{serial_id}:{part}")
     kb.button(text="Yubormaslik", callback_data=f"newpart:skip:{serial_id}:{part}")
     kb.adjust(1)
+    return kb.as_markup()
+
+
+def _vip_receipt_keyboard(user_id: int):
+    kb = InlineKeyboardBuilder()
+    kb.button(text="Tasdiqlash", callback_data=f"vipreceipt:approve:{user_id}")
+    kb.button(text="Rad etish", callback_data=f"vipreceipt:reject:{user_id}")
+    kb.adjust(2)
     return kb.as_markup()
 
 
@@ -377,14 +487,76 @@ def _schedule_delete_message(bot, chat_id: int, message_id: int, delay_seconds: 
         await asyncio.sleep(delay_seconds)
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id)
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
 
     asyncio.create_task(_delete_later())
 
 
+async def _update_receipt_status(bot, user_id: int, text: str) -> None:
+    entries = VIP_RECEIPT_MESSAGES.pop(user_id, [])
+    for admin_id, message_id in entries:
+        try:
+            await bot.edit_message_text(
+                text=text,
+                chat_id=admin_id,
+                message_id=message_id,
+            )
+        except Exception as e:
+            _log_event("loop_continue_error", None, str(e))
+            continue
+
+
+def _is_vip_user(user_id: int) -> bool:
+    info = get_vip_user(user_id)
+    if not info:
+        return False
+    try:
+        expires_at = dt.datetime.fromisoformat(info["expires_at"])
+    except Exception:
+        return False
+    return expires_at > dt.datetime.utcnow()
+
+
 def _filter_serials_for_user(user_id: int, serials: list[dict]) -> list[dict]:
     return serials
+
+
+def _include_vip_serials(user_id: int) -> bool:
+    return is_admin(user_id) or _is_vip_user(user_id)
+
+
+def _visible_serial_parts_for_user(user_id: int, serial_parts: list[dict]) -> list[dict]:
+    if _is_admin_user(user_id) or _is_vip_user(user_id):
+        return serial_parts
+    return [p for p in serial_parts if not int(p.get("is_vip") or 0)]
+
+
+async def _send_vip_info(message: Message, user_id: int) -> None:
+    info = get_vip_user(user_id)
+    price = _get_vip_price()
+    if not info:
+        text = "Sizda VIP yo'q."
+        if price:
+            text += f"\nOylik narx: {price} so'm."
+        text += (
+            "\n\nVIPga qo'shilish uchun:\n"
+            "1. VIPga qo'shilishni bosing.\n"
+            "2. Ko'rsatilgan kartaga to'lov qiling va chekni yuboring."
+        )
+        await message.answer(text, reply_markup=vip_info_keyboard())
+        return
+    try:
+        expires_at = dt.datetime.fromisoformat(info["expires_at"])
+    except Exception:
+        await message.answer("VIP holatini aniqlab bo'lmadi.")
+        return
+    days_left = max(0, (expires_at.date() - dt.datetime.utcnow().date()).days)
+    text = (
+        "VIP aktiv.\n"
+        f"Tugash sanasi: {expires_at.date()} ({days_left} kun qoldi)."
+    )
+    await message.answer(text, reply_markup=vip_info_keyboard())
 
 
 def _normalize_search_text(text: str) -> str:
@@ -727,16 +899,18 @@ async def _copy_source_to_channel(
                 return None, None, None
             if not media:
                 return None, None, None
-            forwarded_msg = await client.send_file(
-                SOURCE_CHANNEL_ID,
-                media,
-                caption=caption,
-                supports_streaming=True,
-            )
-            break
-        except FloodWaitError as err:
-            await asyncio.sleep(err.seconds + 1)
-    copied = await _bot_copy(SOURCE_CHANNEL_ID, SOURCE_CHANNEL_ID, forwarded_msg.id)
+            while True:
+                try:
+                    forwarded_msg = await client.send_file(
+                        SOURCE_CHANNEL_ID,
+                        media,
+                        caption=caption,
+                        supports_streaming=True,
+                    )
+                    break
+                except FloodWaitError as err:
+                    await _wait_retry(err)
+            copied = await _bot_copy(SOURCE_CHANNEL_ID, SOURCE_CHANNEL_ID, forwarded_msg.id)
     return _extract_media(copied)
 
 
@@ -885,8 +1059,8 @@ async def _apply_forum_import(message: Message, session: dict[str, object]) -> N
                         f"{spinner} Skan ketmoqda:\n"
                         f"Mavzular: {scan_idx}/{total_topics}"
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+            _log_event("silent_error", None, str(e))
                 last_edit = now
 
         if not topic_counts:
@@ -926,20 +1100,26 @@ async def _apply_forum_import(message: Message, session: dict[str, object]) -> N
                         is_doc_gif = bool(
                             getattr(getattr(msg, "document", None), "mime_type", "") == "image/gif"
                         )
-                    except Exception:
-                        continue
+                    except Exception as e:
+            _log_event("loop_continue_error", None, str(e))
+            continue
                     if not has_media or is_gif or is_doc_gif:
                         continue
                     if serial_part_source_exists(chat_id, msg.id):
                         continue
                     processed_in_topic += 1
                     caption = _strip_links(getattr(msg, "message", "") or "")
-                    await client.send_file(
+                    while True:
+                        try:
+                            await client.send_file(
                         bot_entity,
                         msg.media,
                         caption=caption or None,
                         supports_streaming=True,
                     )
+                            break
+                        except FloodWaitError as err:
+                            await _wait_retry(err)
                     await asyncio.sleep(0.3)
                     added += 1
                 processed += processed_in_topic
@@ -968,8 +1148,8 @@ async def _apply_forum_import(message: Message, session: dict[str, object]) -> N
                                 f"({processed}/{total_parts})\n"
                                 f"Qolgan vaqt: {_format_eta(remaining)}"
                             )
-                        except Exception:
-                            pass
+                        except Exception as e:
+            _log_event("silent_error", None, str(e))
                         last_edit = now
             if added:
                 added_topics.append(title)
@@ -980,14 +1160,14 @@ async def _apply_forum_import(message: Message, session: dict[str, object]) -> N
                     if await _click_bot_cancel_button(client, bot_entity):
                         cancelled = True
                         break
-                except Exception:
-                    pass
+                except Exception as e:
+            _log_event("silent_error", None, str(e))
                 await asyncio.sleep(0.5)
             if not cancelled:
                 try:
                     await client.send_message(bot_entity, "/serialcancel")
-                except Exception:
-                    pass
+                except Exception as e:
+            _log_event("silent_error", None, str(e))
             now = time.monotonic()
             if now - last_edit > 2.0:
                 parts_percent = int((processed / total_parts) * 100)
@@ -1006,8 +1186,8 @@ async def _apply_forum_import(message: Message, session: dict[str, object]) -> N
                         f"({processed}/{total_parts})\n"
                         f"Qolgan vaqt: {_format_eta(remaining)}"
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+            _log_event("silent_error", None, str(e))
                 last_edit = now
         if not added_topics:
             await status.edit_text("Import tugadi. Yangi qismlar qo'shilmadi.")
@@ -1024,8 +1204,8 @@ async def _apply_forum_import(message: Message, session: dict[str, object]) -> N
         try:
             await asyncio.sleep(5)
             await client.send_message(bot_entity, "/importstop")
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
     finally:
         IMPORT_SESSIONS.pop(user_id, None)
         IMPORT_TASKS.pop(user_id, None)
@@ -1045,7 +1225,30 @@ async def _ensure_vip_access(message: Message, serial: dict, user_id: Optional[i
         user_id,
         f"serial_id={serial.get('id')} is_vip={serial.get('is_vip')}",
     )
-    await _send_vip_required(message, headline="Bu drama VIP.")
+    custom = _get_vip_message()
+    if custom:
+        await message.answer(custom)
+        return False
+    price = _get_vip_price()
+    if price:
+        await message.answer(
+            "Bu drama VIP.\n"
+            f"Oylik narx: {price} so'm.\n\n"
+            "VIPga qo'shilish uchun:\n"
+            "1. /start yuboring.\n"
+            "2. Chiqqan menyulardan VIP HAQIDA menyusini tanlang.\n"
+            "3. VIPga qo'shilishni bosing.\n"
+            "4. Ko'rsatilgan kartaga to'lov qiling va chekni yuboring."
+        )
+    else:
+        await message.answer(
+            "Bu drama VIP.\n\n"
+            "VIPga qo'shilish uchun:\n"
+            "1. /start yuboring.\n"
+            "2. Chiqqan menyulardan VIP HAQIDA menyusini tanlang.\n"
+            "3. VIPga qo'shilishni bosing.\n"
+            "4. Ko'rsatilgan kartaga to'lov qiling va chekni yuboring."
+        )
     return False
 
 
@@ -1067,15 +1270,23 @@ def _cleanup_restore_session(user_id: int) -> None:
                 shutil.rmtree(path)
             else:
                 os.remove(path)
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
+
+
+def _cleanup_upload_resources(user_id: int) -> None:
+    SERIAL_UPLOAD_TASKS.pop(user_id, None)
+    SERIAL_UPLOAD_QUEUES.pop(user_id, None)
+    SERIAL_UPLOAD_COUNTERS.pop(user_id, None)
+    SERIAL_UPLOAD_LOCKS.pop(user_id, None)
+    SERIAL_UPLOAD_NEXT_PART = [
+        key for key in list(globals().get("SERIAL_UPLOAD_NEXT_PART", {}).keys())
+        if key[0] == user_id
+    ]
+    for key in SERIAL_UPLOAD_NEXT_PART:
+        globals()["SERIAL_UPLOAD_NEXT_PART"].pop(key, None)
 
 router = Router()
-
-# Sub-routers
-from app.handlers_vip import router as vip_router
-
-router.include_router(vip_router)
 LOG_TAIL_LINES = 40
 LOG_MAX_BYTES = 10 * 1024 * 1024
 LOG_BACKUP_COUNT = 3
@@ -1263,11 +1474,10 @@ async def check_subs_callback(callback: CallbackQuery):
                         callback.message,
                         serial["id"],
                         int(pending_part),
-                        user_id=callback.from_user.id,
                     ):
                         await callback.message.edit_text("Obuna tasdiqlandi.")
                         return
-                elif await _show_serial_parts_for_user(callback.message, serial["id"], user_id=callback.from_user.id):
+                elif await _show_serial_parts(callback.message, serial["id"]):
                     await callback.message.edit_text("Obuna tasdiqlandi.")
                     return
             await callback.message.edit_text("Obuna tasdiqlandi. Drama topilmadi.")
@@ -1285,6 +1495,11 @@ async def user_send_code_callback(callback: CallbackQuery):
     if is_admin(callback.from_user.id) and get_serial_session(callback.from_user.id):
         clear_serial_session(callback.from_user.id)
     await callback.message.edit_text("Drama kodini yuboring.")
+
+
+@router.callback_query(F.data == "user:vipinfo")
+async def user_vipinfo_callback(callback: CallbackQuery):
+    await _send_vip_info(callback.message, callback.from_user.id)
 
 
 @router.callback_query(F.data == "user:contact")
@@ -1331,8 +1546,36 @@ async def _forward_user_message_to_admins(message: Message, reason: str) -> None
             _remember_contact_reply(admin_id, header_msg.message_id, message.from_user.id)
             copied = await message.copy_to(admin_id)
             _remember_contact_reply(admin_id, copied.message_id, message.from_user.id)
-        except Exception:
+        except Exception as e:
+            _log_event("loop_continue_error", None, str(e))
             continue
+
+
+@router.callback_query(F.data.startswith("vipjoin:"))
+async def vip_join_callback(callback: CallbackQuery):
+    parts = callback.data.split(":")
+    if len(parts) != 2:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    action = parts[1]
+    if action == "cancel":
+        VIP_PAYMENT_SESSIONS.discard(callback.from_user.id)
+        await callback.message.edit_text("Bekor qilindi.")
+        return
+    if action != "start":
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    number, owner = _get_vip_card_details()
+    if not number or not owner:
+        await callback.message.edit_text("Rekvizitlar belgilanmagan. Admin bilan bog'laning.")
+        return
+    VIP_PAYMENT_SESSIONS.add(callback.from_user.id)
+    text = (
+        f"To'lov uchun karta: {number}\n"
+        f"Karta egasi: {owner}\n\n"
+        "To'lov qilgandan so'ng chekni shu yerga yuboring."
+    )
+    await callback.message.edit_text(text)
 
 
 @router.callback_query(F.data == "user:serials")
@@ -1504,7 +1747,11 @@ async def user_like_toggle_callback(callback: CallbackQuery):
     if not await _ensure_serial_access(callback.message, serial, user_id=callback.from_user.id):
         return
     set_serial_rating(callback.from_user.id, serial_id, value)
-    part_numbers, vip_parts = _serial_part_numbers_for_keyboard(serial_id)
+    serial_parts = _visible_serial_parts_for_user(
+        callback.from_user.id,
+        get_serial_parts(serial_id),
+    )
+    part_numbers = [int(item["part"]) for item in serial_parts if item.get("part") is not None]
     if not part_numbers:
         await callback.answer()
         return
@@ -1533,7 +1780,6 @@ async def user_like_toggle_callback(callback: CallbackQuery):
             part_numbers,
             page=0,
             per_page=SERIAL_PARTS_PER_PAGE,
-            vip_parts=vip_parts,
             share_link=share_link,
             notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
             rating=get_serial_rating(callback.from_user.id, serial_id),
@@ -1569,7 +1815,11 @@ async def user_like_legacy_callback(callback: CallbackQuery):
     if not await _ensure_serial_access(callback.message, serial, user_id=callback.from_user.id):
         return
     set_serial_rating(callback.from_user.id, serial_id, 1)
-    part_numbers, vip_parts = _serial_part_numbers_for_keyboard(serial_id)
+    serial_parts = _visible_serial_parts_for_user(
+        callback.from_user.id,
+        get_serial_parts(serial_id),
+    )
+    part_numbers = [int(item["part"]) for item in serial_parts if item.get("part") is not None]
     if not part_numbers:
         await callback.answer()
         return
@@ -1585,7 +1835,6 @@ async def user_like_legacy_callback(callback: CallbackQuery):
         part_numbers,
         page=0,
         per_page=SERIAL_PARTS_PER_PAGE,
-        vip_parts=vip_parts,
         share_link=share_link,
         notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
         rating=get_serial_rating(callback.from_user.id, serial_id),
@@ -1624,9 +1873,9 @@ async def serial_part_callback(callback: CallbackQuery):
         return
     if not await _ensure_serial_access(callback.message, serial, user_id=callback.from_user.id):
         return
-    ok = await _send_serial_part(callback.message, serial_id, part, user_id=callback.from_user.id)
+    ok = await _send_serial_part(callback.message, serial_id, part)
     if not ok:
-        await callback.answer()
+        await callback.answer("Qism topilmadi.", show_alert=True)
         return
     _log_event("serial_part_sent", callback.from_user.id, f"serial_id={serial_id} part={part}")
 
@@ -1649,7 +1898,11 @@ async def serial_page_callback(callback: CallbackQuery):
         return
     if not await _ensure_serial_access(callback.message, serial, user_id=callback.from_user.id):
         return
-    part_numbers, vip_parts = _serial_part_numbers_for_keyboard(serial_id)
+    serial_parts = _visible_serial_parts_for_user(
+        callback.from_user.id,
+        get_serial_parts(serial_id),
+    )
+    part_numbers = [int(item["part"]) for item in serial_parts if item.get("part") is not None]
     if not part_numbers:
         await callback.answer("Dramada qismlar yo'q.", show_alert=True)
         return
@@ -1663,7 +1916,6 @@ async def serial_page_callback(callback: CallbackQuery):
             part_numbers,
             page=page,
             per_page=SERIAL_PARTS_PER_PAGE,
-            vip_parts=vip_parts,
             notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
             rating=rating,
             likes_count=likes_count,
@@ -1674,12 +1926,6 @@ async def serial_page_callback(callback: CallbackQuery):
 
 def _today() -> str:
     return dt.datetime.utcnow().date().isoformat()
-
-
-def _serial_part_numbers_for_keyboard(serial_id: int) -> tuple[list[int], set[int]]:
-    serial = get_serial_by_id(serial_id)
-    all_parts = get_serial_parts(serial_id)
-    return _serial_part_numbers_with_vip(serial, all_parts)
 
 
 def _parse_code(raw: str) -> Optional[str]:
@@ -2394,6 +2640,43 @@ async def rename_serial_handler(message: Message, command: CommandObject):
     )
 
 
+@router.message(Command("addvip"))
+async def add_vip_handler(message: Message, command: CommandObject):
+    if not _has_perm(message.from_user.id, "can_manage_vip"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    if not command.args:
+        await message.answer("Foydalanish: /addvip <user_id>")
+        return
+    try:
+        user_id = int(command.args.strip())
+    except ValueError:
+        await message.answer("user_id raqam bo'lishi kerak.")
+        return
+    VIP_ADD_SESSIONS[message.from_user.id] = user_id
+    await message.answer(
+        "VIP muddatini tanlang:",
+        reply_markup=vip_duration_keyboard(user_id),
+    )
+
+
+@router.message(Command("delvip"))
+async def del_vip_handler(message: Message, command: CommandObject):
+    if not _has_perm(message.from_user.id, "can_manage_vip"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    if not command.args:
+        await message.answer("Foydalanish: /delvip <user_id>")
+        return
+    try:
+        user_id = int(command.args.strip())
+    except ValueError:
+        await message.answer("user_id raqam bo'lishi kerak.")
+        return
+    remove_vip_user(user_id)
+    await message.answer("VIP olib tashlandi.")
+
+
 @router.message(Command("delserial"))
 async def del_serial_handler(message: Message, command: CommandObject):
     if not _has_perm(message.from_user.id, "can_add_serial"):
@@ -2449,6 +2732,102 @@ async def del_part_handler(message: Message, command: CommandObject):
         return
     del_serial_part(serial["id"], part)
     await message.answer("Qism o'chirildi.")
+
+
+@router.message(Command("vippart"))
+async def vip_part_toggle_handler(message: Message, command: CommandObject):
+    if not _has_perm(message.from_user.id, "can_manage_vip"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    args = (command.args or "").split()
+    if len(args) != 3:
+        await message.answer("Foydalanish: /vippart <drama_kod> <qism> <on|off>")
+        return
+    code = _parse_code(args[0])
+    part = _parse_part(args[1])
+    flag = args[2].strip().lower()
+    if not code or part is None:
+        await message.answer("Kod va qism raqami raqam bo'lishi kerak.")
+        return
+    is_vip = 1 if flag in {"on", "1", "vip", "ha", "yes", "true"} else 0
+    if flag not in {"on", "1", "vip", "ha", "yes", "true", "off", "0", "no", "yoq", "false"}:
+        await message.answer("Uchinchi argument: on yoki off.")
+        return
+    serial = get_serial_by_code(int(code))
+    if not serial:
+        await message.answer("Drama topilmadi.")
+        return
+    item = get_serial_part(serial["id"], part)
+    if not item:
+        await message.answer("Qism topilmadi.")
+        return
+    set_serial_part_vip(serial["id"], part, is_vip)
+    await message.answer("VIP qism belgilandi." if is_vip else "VIP qism o'chirildi.")
+
+
+@router.message(Command("viplist"))
+async def vip_list_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_manage_vip"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    await _render_vip_list(message, page=0)
+
+
+@router.message(Command("setvipprice"))
+async def set_vip_price_handler(message: Message, command: CommandObject):
+    if not _has_perm(message.from_user.id, "can_manage_vip"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    if not command.args:
+        await message.answer("Foydalanish: /setvipprice <sum>")
+        return
+    raw = command.args.strip().replace(" ", "")
+    if not raw.isdigit():
+        await message.answer("Narx raqam bo'lishi kerak.")
+        return
+    set_setting(VIP_PRICE_KEY, raw)
+    await message.answer(f"VIP oylik narx: {raw} so'm")
+
+
+@router.message(Command("vipprice"))
+async def vip_price_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_manage_vip"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    price = _get_vip_price()
+    text = f"VIP oylik narx: {price} so'm" if price else "VIP oylik narx belgilanmagan."
+    await message.answer(text)
+
+
+@router.message(Command("vipmsg"))
+async def vip_message_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_manage_vip"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    current = _get_vip_message()
+    text = "VIP xabari belgilanmagan."
+    if current:
+        text = f"Joriy VIP xabari:\n{current}"
+    VIP_MESSAGE_SESSIONS.add(message.from_user.id)
+    await message.answer(f"{text}\n\nYangi xabarni yuboring.")
+
+
+@router.message(Command("vipcard"))
+async def vip_card_handler(message: Message):
+    if not _has_perm(message.from_user.id, "can_manage_vip"):
+        await message.answer("Bu buyruq uchun ruxsat yo'q.")
+        return
+    number, owner = _get_vip_card_details()
+    current = "VIP rekvizit belgilanmagan."
+    if number or owner:
+        current = f"Joriy rekvizit:\nKarta: {number or '-'}\nEgasi: {owner or '-'}"
+    VIP_CARD_SESSIONS.add(message.from_user.id)
+    await message.answer(
+        f"{current}\n\n"
+        "Yangi rekvizit yuboring.\n"
+        "Format: 8600 0000 0000 0000 | FIO",
+        reply_markup=admin_back_keyboard(),
+    )
 
 
 @router.message(Command("admins"))
@@ -2749,6 +3128,71 @@ async def admin_backup_callback(callback: CallbackQuery):
     _log_event("backup_sent", callback.from_user.id)
 
 
+@router.callback_query(F.data == "admin:viplist")
+async def admin_viplist_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_manage_vip"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    await _render_vip_list(callback.message, page=0)
+
+
+@router.callback_query(F.data.startswith("admin:viplist:"))
+async def admin_viplist_page_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_manage_vip"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    try:
+        page = int(parts[2])
+    except ValueError:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    await _render_vip_list(callback.message, page=page)
+
+
+@router.callback_query(F.data == "admin:vipprice")
+async def admin_vipprice_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_manage_vip"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    price = _get_vip_price()
+    text = f"VIP oylik narx: {price} so'm" if price else "VIP oylik narx belgilanmagan."
+    await callback.message.edit_text(text, reply_markup=vip_price_keyboard())
+
+
+@router.callback_query(F.data == "admin:vipmsg")
+async def admin_vipmsg_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_manage_vip"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    current = _get_vip_message()
+    text = "VIP xabari belgilanmagan."
+    if current:
+        text = f"Joriy VIP xabari:\n{current}"
+    VIP_MESSAGE_SESSIONS.add(callback.from_user.id)
+    await callback.message.edit_text(f"{text}\n\nYangi xabarni yuboring.")
+
+
+@router.callback_query(F.data == "admin:vipcard")
+async def admin_vipcard_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_manage_vip"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    number, owner = _get_vip_card_details()
+    current = "VIP rekvizit belgilanmagan."
+    if number or owner:
+        current = f"Joriy rekvizit:\nKarta: {number or '-'}\nEgasi: {owner or '-'}"
+    VIP_CARD_SESSIONS.add(callback.from_user.id)
+    await callback.message.edit_text(
+        f"{current}\n\n"
+        "Yangi rekvizit yuboring.\n"
+        "Format: 8600 0000 0000 0000 | FIO",
+        reply_markup=admin_back_keyboard(),
+    )
+
 @router.callback_query(F.data.startswith("admin:users:"))
 async def admin_users_page_callback(callback: CallbackQuery):
     if not _has_perm(callback.from_user.id, "can_view_lists"):
@@ -2802,8 +3246,8 @@ async def _render_users_page(callback: CallbackQuery, page: int) -> None:
                     user=chat,
                 )
             )
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
         offset += _utf16_len(line) + 1
     body = "\n".join(lines)
     text = f"{header}\n{body}"
@@ -2870,6 +3314,35 @@ async def _render_admins_edit_page(callback: CallbackQuery, page: int) -> None:
         "Adminni tanlang:",
         reply_markup=admin_edit_list_keyboard(page_admins, page, total_pages),
     )
+
+
+async def _render_vip_list(message: Message, page: int) -> None:
+    total = count_vip_users()
+    if total == 0:
+        await message.answer("VIP foydalanuvchilar yo'q.")
+        return
+    total_pages = max(1, (total + VIP_LISTS_PER_PAGE - 1) // VIP_LISTS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * VIP_LISTS_PER_PAGE
+    end = start + VIP_LISTS_PER_PAGE
+    page_users = get_vip_users_page(VIP_LISTS_PER_PAGE, start)
+    user_map = {user["user_id"]: user.get("username") for user in get_users()}
+    lines = [f"VIP foydalanuvchilar: {total} ta"]
+    now = dt.datetime.utcnow()
+    for item in page_users:
+        try:
+            expires_at = dt.datetime.fromisoformat(item["expires_at"])
+        except Exception:
+            expires_at = None
+        remaining = ""
+        if expires_at:
+            delta = (expires_at - now).days
+            remaining = f" ({delta} kun)"
+        username = user_map.get(item["user_id"])
+        label = f"@{username}" if username else str(item["user_id"])
+        expires_text = item["expires_at"].split("T")[0]
+        lines.append(f"{label} - {expires_text}{remaining}")
+    await message.answer("\n".join(lines), reply_markup=vip_list_keyboard(page, total_pages))
 
 
 async def _render_user_serials_page(callback: CallbackQuery, page: int, sort_key: str = "az") -> None:
@@ -3097,6 +3570,175 @@ async def admin_permissions_callback(callback: CallbackQuery):
         ADMIN_ADD_SESSIONS.pop(callback.from_user.id, None)
         _log_event("admin_add_cancel", callback.from_user.id, f"target_id={session.get('target_id')}")
         await callback.message.edit_text("Bekor qilindi.", reply_markup=admin_back_keyboard())
+        return
+    await callback.answer("Xatolik.", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("vip:"))
+async def vip_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_manage_vip"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    action = parts[1]
+    if action == "cancel":
+        VIP_ADD_SESSIONS.pop(callback.from_user.id, None)
+        await callback.message.edit_text("Bekor qilindi.", reply_markup=admin_back_keyboard())
+        return
+    if action != "add" or len(parts) != 4:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    try:
+        user_id = int(parts[2])
+        days = int(parts[3])
+    except ValueError:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    if VIP_ADD_SESSIONS.get(callback.from_user.id) != user_id:
+        await callback.answer("Sessiya topilmadi.", show_alert=True)
+        return
+    expires_at = (dt.datetime.utcnow() + dt.timedelta(days=days)).isoformat()
+    add_vip_user(user_id, expires_at)
+    VIP_ADD_SESSIONS.pop(callback.from_user.id, None)
+    await callback.message.edit_text(
+        f"VIP qo'shildi. Muddati: {days} kun.",
+        reply_markup=admin_back_keyboard(),
+    )
+
+
+@router.callback_query(F.data.startswith("vipprice:"))
+async def vipprice_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_manage_vip"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    action = parts[1]
+    if action == "cancel":
+        VIP_PRICE_SESSIONS.discard(callback.from_user.id)
+        await callback.message.edit_text("Bekor qilindi.", reply_markup=admin_back_keyboard())
+        return
+    if action == "custom":
+        VIP_PRICE_SESSIONS.add(callback.from_user.id)
+        await callback.message.edit_text("Yangi narxni yuboring.")
+        return
+    if action == "set" and len(parts) == 3:
+        raw = parts[2]
+        if not raw.isdigit():
+            await callback.answer("Xatolik.", show_alert=True)
+            return
+        set_setting(VIP_PRICE_KEY, raw)
+        VIP_PRICE_SESSIONS.discard(callback.from_user.id)
+        await callback.message.edit_text(
+            f"VIP oylik narx: {raw} so'm",
+            reply_markup=admin_back_keyboard(),
+        )
+        return
+    await callback.answer("Xatolik.", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("vipreceipt:"))
+async def vipreceipt_callback(callback: CallbackQuery):
+    if not _has_perm(callback.from_user.id, "can_manage_vip"):
+        await callback.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    action = parts[1]
+    try:
+        user_id = int(parts[2])
+    except ValueError:
+        await callback.answer("Xatolik.", show_alert=True)
+        return
+    if action == "approve":
+        if user_id in VIP_RECEIPT_REJECTED:
+            rejector_id = VIP_RECEIPT_REJECTED.get(user_id)
+            rejector = f"@{callback.from_user.username}" if callback.from_user.username else str(callback.from_user.id)
+            if rejector_id and rejector_id != callback.from_user.id:
+                await callback.message.edit_text(
+                    f"Chek rad etilgan. Rad qilgan: {rejector}",
+                )
+                await callback.answer("Bu chek rad etilgan.", show_alert=True)
+                return
+        if user_id in VIP_RECEIPT_APPROVED:
+            approver_id = VIP_RECEIPT_APPROVED.get(user_id)
+            approver = f"@{callback.from_user.username}" if callback.from_user.username else str(callback.from_user.id)
+            if approver_id and approver_id != callback.from_user.id:
+                await callback.message.edit_text(
+                    f"Chek tasdiqlangan. Tasdiqlagan: {approver}",
+                )
+                await callback.answer("Bu chek allaqachon tasdiqlangan.", show_alert=True)
+                return
+        VIP_ADD_SESSIONS[callback.from_user.id] = user_id
+        VIP_RECEIPT_APPROVED[user_id] = callback.from_user.id
+        admin_label = (
+            f"@{callback.from_user.username}"
+            if callback.from_user.username
+            else str(callback.from_user.id)
+        )
+        admins = [admin_id for admin_id in get_admins() if has_admin_permission(admin_id, "can_manage_vip")]
+        if OWNER_ID and OWNER_ID not in admins:
+            admins.append(OWNER_ID)
+        notify_text = (
+            "VIP cheki tasdiqlandi.\n"
+            f"user_id: {user_id}\n"
+            f"Tasdiqlagan: {admin_label}"
+        )
+        for admin_id in admins:
+            if admin_id == callback.from_user.id:
+                continue
+            try:
+                await callback.bot.send_message(admin_id, notify_text)
+            except Exception as e:
+            _log_event("loop_continue_error", None, str(e))
+            continue
+        await _update_receipt_status(
+            callback.bot,
+            user_id,
+            f"Chek tasdiqlangan. Tasdiqlagan: {admin_label}",
+        )
+        await callback.message.edit_text(
+            f"VIP tasdiqlash: {user_id}. Muddatni tanlang:",
+            reply_markup=vip_duration_keyboard(user_id),
+        )
+        return
+    if action == "reject":
+        if user_id in VIP_RECEIPT_APPROVED:
+            approver_id = VIP_RECEIPT_APPROVED.get(user_id)
+            approver = (
+                f"@{callback.from_user.username}"
+                if callback.from_user.username
+                else str(callback.from_user.id)
+            )
+            if approver_id and approver_id != callback.from_user.id:
+                await callback.message.edit_text(
+                    f"Chek tasdiqlangan. Tasdiqlagan: {approver}",
+                )
+                await callback.answer("Bu chek tasdiqlangan.", show_alert=True)
+                return
+        if user_id in VIP_RECEIPT_REJECTED:
+            rejector_id = VIP_RECEIPT_REJECTED.get(user_id)
+            rejector = (
+                f"@{callback.from_user.username}"
+                if callback.from_user.username
+                else str(callback.from_user.id)
+            )
+            if rejector_id and rejector_id != callback.from_user.id:
+                await callback.message.edit_text(
+                    f"Chek rad etilgan. Rad qilgan: {rejector}",
+                )
+                await callback.answer("Bu chek rad etilgan.", show_alert=True)
+                return
+        VIP_RECEIPT_REJECTED[user_id] = callback.from_user.id
+        VIP_REJECT_SESSIONS[callback.from_user.id] = user_id
+        await callback.message.edit_text("Rad etish sababini yuboring.")
         return
     await callback.answer("Xatolik.", show_alert=True)
 
@@ -4020,8 +4662,8 @@ async def admin_reply_to_contact_handler(message: Message):
         return
     try:
         await message.copy_to(target_id)
-    except Exception:
-        pass
+    except Exception as e:
+            _log_event("silent_error", None, str(e))
 
 
 @router.message(
@@ -4334,7 +4976,8 @@ async def vip_payment_receipt_handler(message: Message):
                 (admin_id, sent.message_id)
             )
             await message.copy_to(admin_id)
-        except Exception:
+        except Exception as e:
+            _log_event("loop_continue_error", None, str(e))
             continue
     await message.answer("Chek qabul qilindi. Tez orada adminlar tekshiradi.")
 
@@ -4461,31 +5104,20 @@ async def post_photo_handler(message: Message):
 
 
 async def _show_serial_parts(message: Message, serial_id: int) -> bool:
-    user_id = message.from_user.id if message.from_user else 0
-    return await _show_serial_parts_for_user(message, serial_id, user_id=user_id)
-
-
-def _serial_part_numbers_with_vip(serial: Optional[dict], parts_rows: list[dict]) -> tuple[list[int], set[int]]:
-    part_numbers = [int(item["part"]) for item in parts_rows if item.get("part") is not None]
-    part_numbers_sorted = sorted(set(part_numbers))
-    vip_parts = {
-        int(item["part"])
-        for item in parts_rows
-        if item.get("part") is not None and int(item.get("is_vip") or 0) == 1
-    }
-    if serial and serial.get("is_vip"):
-        vip_parts = set(part_numbers_sorted)
-    return part_numbers_sorted, vip_parts
-
-
-async def _show_serial_parts_for_user(message: Message, serial_id: int, user_id: int) -> bool:
     all_parts = get_serial_parts(serial_id)
     serial = get_serial_by_id(serial_id)
     if not all_parts:
         return False
-    part_numbers_sorted, vip_parts = _serial_part_numbers_with_vip(serial, all_parts)
-    if not part_numbers_sorted:
+    parts = _visible_serial_parts_for_user(message.from_user.id, all_parts)
+    if not parts:
+        if serial:
+            await _ensure_vip_access(message, serial)
+            return True
         return False
+    part_numbers = [int(item["part"]) for item in parts if item.get("part") is not None]
+    if not part_numbers:
+        return False
+    part_numbers_sorted = sorted(set(part_numbers))
     parts_count = len(part_numbers_sorted)
     share_link = (
         await _get_share_link(
@@ -4517,12 +5149,11 @@ async def _show_serial_parts_for_user(message: Message, serial_id: int, user_id:
             part_numbers_sorted,
             page=0,
             per_page=SERIAL_PARTS_PER_PAGE,
-            vip_parts=vip_parts,
             share_link=share_link,
             part_link_prefix=part_link_prefix,
             show_rating=show_rating,
-            notify_enabled=_is_serial_notify_enabled(user_id, serial_id),
-            rating=get_serial_rating(user_id, serial_id),
+            notify_enabled=_is_serial_notify_enabled(message.from_user.id, serial_id),
+            rating=get_serial_rating(message.from_user.id, serial_id),
             likes_count=likes_count,
             dislikes_count=dislikes_count,
         ),
@@ -4534,10 +5165,8 @@ async def _send_serial_part(
     message: Message,
     serial_id: int,
     part: int,
-    part_numbers: Optional[list[int]] = None,
-    user_id: Optional[int] = None,
-) -> bool:
-    requester_id = user_id if user_id is not None else (message.from_user.id if message.from_user else 0)
+    part_numbers: Optional[list[int]] = None, 
+      ) -> bool:
     item = get_serial_part(serial_id, part)
     if not item:
         return False
@@ -4548,22 +5177,23 @@ async def _send_serial_part(
     
 
 
-    if serial and serial.get("is_vip") and not _is_admin_user(requester_id) and not _is_vip_user(requester_id):
-        await _send_vip_required(message, headline="Bu drama VIP.")
-        return False
-    if part_is_vip and not _is_admin_user(requester_id) and not _is_vip_user(requester_id):
-        await _send_vip_required(message, headline="Bu qism VIP.")
+    if part_is_vip and not _is_admin_user(message.from_user.id) and not _is_vip_user(message.from_user.id):
+        if serial:
+            await _ensure_vip_access(message, serial)
         return False
     if serial:
         record_serial_view(_today(), int(serial["code"]))
         record_user_serial_view(
-            requester_id,
+            message.from_user.id,
             int(serial["id"]),
             dt.datetime.utcnow().isoformat(),
         )
     if part_numbers is None:
-        all_parts = get_serial_parts(serial_id)
-        part_numbers, _vip_parts = _serial_part_numbers_with_vip(serial, all_parts)
+        parts = _visible_serial_parts_for_user(
+            message.from_user.id,
+            get_serial_parts(serial_id),
+        )
+        part_numbers = [int(row["part"]) for row in parts if row.get("part") is not None]
     part_numbers_sorted = sorted(part_numbers) if part_numbers else []
     parts_count = len(part_numbers_sorted)
     share_link = (
@@ -4597,8 +5227,8 @@ async def _send_serial_part(
         current_part=part,
         part_link_prefix=part_link_prefix,
         show_rating=show_rating,
-        notify_enabled=_is_serial_notify_enabled(requester_id, serial_id),
-        rating=get_serial_rating(requester_id, serial_id),
+        notify_enabled=_is_serial_notify_enabled(message.from_user.id, serial_id),
+        rating=get_serial_rating(message.from_user.id, serial_id),
         likes_count=likes_count,
         dislikes_count=dislikes_count,
     )
@@ -4840,8 +5470,8 @@ async def movie_text_handler(message: Message):
                     "VIP to'lov cheki rad etildi.\n"
                     f"Sabab: {reason}",
                 )
-            except Exception:
-                pass
+            except Exception as e:
+            _log_event("silent_error", None, str(e))
             admin_label = f"@{message.from_user.username}" if message.from_user.username else str(message.from_user.id)
             admins = [admin_id for admin_id in get_admins() if has_admin_permission(admin_id, "can_manage_vip")]
             if OWNER_ID and OWNER_ID not in admins:
@@ -4857,8 +5487,9 @@ async def movie_text_handler(message: Message):
                     continue
                 try:
                     await message.bot.send_message(admin_id, notify_text)
-                except Exception:
-                    continue
+                except Exception as e:
+            _log_event("loop_continue_error", None, str(e))
+            continue
             await _update_receipt_status(
                 message.bot,
                 target_id,
@@ -5089,8 +5720,8 @@ async def _send_backup(message: Message) -> None:
     finally:
         try:
             os.remove(backup_path)
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
 
 
 async def _send_log_file(message: Message) -> None:
@@ -5106,27 +5737,72 @@ async def vip_reminder_loop(bot) -> None:
         try:
             await _run_vip_expired_notifications(bot, tz)
             await _run_vip_reminders(bot)
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("vip_loop_error", None, str(e))
         await asyncio.sleep(VIP_REMINDER_INTERVAL)
+
 
 
 async def cache_cleanup_loop() -> None:
     if CACHE_CLEAN_INTERVAL <= 0:
         return
+
+    buckets = {
+        "LOG_QUERY_ADMINS": LOG_QUERY_ADMINS,
+        "ADMIN_ADD_SESSIONS": ADMIN_ADD_SESSIONS,
+        "RESTORE_DB_SESSIONS": RESTORE_DB_SESSIONS,
+        "POST_SESSIONS": POST_SESSIONS,
+        "USER_SEARCH_SESSIONS": USER_SEARCH_SESSIONS,
+        "USER_SEARCH_RESULTS": USER_SEARCH_RESULTS,
+        "USER_SERIALS_LIST": USER_SERIALS_LIST,
+        "VIP_ADD_SESSIONS": VIP_ADD_SESSIONS,
+        "VIP_PRICE_SESSIONS": VIP_PRICE_SESSIONS,
+        "VIP_MESSAGE_SESSIONS": VIP_MESSAGE_SESSIONS,
+        "VIP_CARD_SESSIONS": VIP_CARD_SESSIONS,
+        "VIP_PAYMENT_SESSIONS": VIP_PAYMENT_SESSIONS,
+        "VIP_REJECT_SESSIONS": VIP_REJECT_SESSIONS,
+        "CONTACT_ADMIN_SESSIONS": CONTACT_ADMIN_SESSIONS,
+        "BROADCAST_SESSIONS": BROADCAST_SESSIONS,
+        "BROADCAST_TEXT_SESSIONS": BROADCAST_TEXT_SESSIONS,
+        "ADMIN_USER_MESSAGE_SESSIONS": ADMIN_USER_MESSAGE_SESSIONS,
+        "VIP_RECEIPT_APPROVED": VIP_RECEIPT_APPROVED,
+        "VIP_RECEIPT_REJECTED": VIP_RECEIPT_REJECTED,
+        "VIP_RECEIPT_MESSAGES": VIP_RECEIPT_MESSAGES,
+        "SERIAL_UPLOAD_LOCKS": SERIAL_UPLOAD_LOCKS,
+        "SERIAL_UPLOAD_QUEUES": SERIAL_UPLOAD_QUEUES,
+        "SERIAL_UPLOAD_COUNTERS": SERIAL_UPLOAD_COUNTERS,
+        "SERIAL_UPLOAD_NEXT_PART": SERIAL_UPLOAD_NEXT_PART,
+        "IMPORT_TASKS": IMPORT_TASKS,
+        "IMPORT_SESSIONS": IMPORT_SESSIONS,
+        "SERIAL_RENAME_SESSIONS": SERIAL_RENAME_SESSIONS,
+        "SERIAL_BANNER_SESSIONS": SERIAL_BANNER_SESSIONS,
+        "PENDING_START_CODES": PENDING_START_CODES,
+        "GROUP_SPAM_TRACKER": GROUP_SPAM_TRACKER,
+    }
+
     while True:
         await asyncio.sleep(CACHE_CLEAN_INTERVAL)
         try:
-            cleanup_sessions()
-            for user_id in list(USER_SEARCH_RESULTS.keys()):
-                if user_id not in USER_SEARCH_SESSIONS:
-                    USER_SEARCH_RESULTS.pop(user_id, None)
-            for user_id in list(BROADCAST_SESSIONS.keys()):
-                if user_id not in BROADCAST_TEXT_SESSIONS:
-                    BROADCAST_SESSIONS.pop(user_id, None)
-        except Exception:
-            pass
+            for name, bucket in buckets.items():
+                _cleanup_session_bucket(name, bucket)
 
+            # cleanup finished upload tasks
+            for user_id, task in list(SERIAL_UPLOAD_TASKS.items()):
+                if task.done():
+                    SERIAL_UPLOAD_TASKS.pop(user_id, None)
+                    SERIAL_UPLOAD_QUEUES.pop(user_id, None)
+                    SERIAL_UPLOAD_COUNTERS.pop(user_id, None)
+                    SERIAL_UPLOAD_LOCKS.pop(user_id, None)
+                    _clear_session_activity("SERIAL_UPLOAD_TASKS", user_id)
+
+            for user_id, task in list(IMPORT_TASKS.items()):
+                if task.done():
+                    IMPORT_TASKS.pop(user_id, None)
+                    IMPORT_SESSIONS.pop(user_id, None)
+                    _clear_session_activity("IMPORT_TASKS", user_id)
+
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
 
 def _seconds_until_next_backup(now: dt.datetime, tz: ZoneInfo) -> float:
     local_now = now.astimezone(tz)
@@ -5199,8 +5875,8 @@ async def backup_schedule_loop(bot) -> None:
                 if OWNER_ID:
                     await bot.send_document(OWNER_ID, FSInputFile(path), caption="Backup")
                 _log_event("backup_scheduled", None, f"path={path}")
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("backup_loop_error", None, str(e))
 
 
 async def daily_recommendation_loop(bot) -> None:
@@ -5212,8 +5888,8 @@ async def daily_recommendation_loop(bot) -> None:
             delay = (target - now.astimezone(tz)).total_seconds()
             await asyncio.sleep(max(60, delay))
             await _send_daily_recommendation(bot, tz)
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
 
 
 async def daily_recommendation_prepare_loop(bot) -> None:
@@ -5229,8 +5905,8 @@ async def daily_recommendation_prepare_loop(bot) -> None:
             if not _should_prepare_recommendations(now_utc):
                 continue
             await _prepare_daily_recommendations(bot, local_now.date())
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
 
 
 def _pick_user_recommendation(
@@ -5343,7 +6019,8 @@ async def _run_vip_reminders(bot) -> None:
             continue
         try:
             expires_at = dt.datetime.fromisoformat(item["expires_at"])
-        except Exception:
+        except Exception as e:
+            _log_event("loop_continue_error", None, str(e))
             continue
         days_left = (expires_at.date() - now.date()).days
         if days_left == 7 and not item.get("reminded_7d"):
@@ -5353,8 +6030,8 @@ async def _run_vip_reminders(bot) -> None:
             try:
                 await bot.send_message(item["user_id"], text)
                 mark_vip_reminder(item["user_id"], 7)
-            except Exception:
-                pass
+            except Exception as e:
+            _log_event("silent_error", None, str(e))
         if days_left == 2 and not item.get("reminded_2d"):
             text = "VIP obuna muddati 2 kundan so'ng tugaydi."
             if price:
@@ -5362,8 +6039,8 @@ async def _run_vip_reminders(bot) -> None:
             try:
                 await bot.send_message(item["user_id"], text)
                 mark_vip_reminder(item["user_id"], 2)
-            except Exception:
-                pass
+            except Exception as e:
+            _log_event("silent_error", None, str(e))
         if days_left == 1 and not item.get("reminded_1d"):
             text = "VIP obuna muddati 1 kundan so'ng tugaydi."
             if price:
@@ -5371,8 +6048,8 @@ async def _run_vip_reminders(bot) -> None:
             try:
                 await bot.send_message(item["user_id"], text)
                 mark_vip_reminder(item["user_id"], 1)
-            except Exception:
-                pass
+            except Exception as e:
+            _log_event("silent_error", None, str(e))
 
 
 async def _run_vip_expired_notifications(bot, tz: ZoneInfo) -> None:
@@ -5390,7 +6067,8 @@ async def _run_vip_expired_notifications(bot, tz: ZoneInfo) -> None:
             continue
         try:
             expires_at = dt.datetime.fromisoformat(item["expires_at"])
-        except Exception:
+        except Exception as e:
+            _log_event("loop_continue_error", None, str(e))
             continue
         expires_date = expires_at.date()
         expires_at_local = dt.datetime(
@@ -5412,16 +6090,16 @@ async def _run_vip_expired_notifications(bot, tz: ZoneInfo) -> None:
                 "Savol bo'lsa adminlarga yozing: /contact",
             )
             VIP_EXPIRED_NOTICE_MESSAGE_ID[user_id] = sent.message_id
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
         if OWNER_ID and int(OWNER_ID) != user_id:
             try:
                 await bot.send_message(
                     int(OWNER_ID),
                     f"VIP obuna tugadi: user_id={user_id} (muddati: {expires_date.isoformat()})",
                 )
-            except Exception:
-                pass
+            except Exception as e:
+            _log_event("silent_error", None, str(e))
     set_setting(VIP_EXPIRED_NOTIFY_LAST_DATE_KEY, today)
 
 
@@ -6248,8 +6926,8 @@ async def serial_notify_callback(callback: CallbackQuery):
         await callback.answer("Bildirishnomalar o'chirildi.")
         try:
             await callback.message.edit_reply_markup(reply_markup=None)
-        except Exception:
-            pass
+        except Exception as e:
+            _log_event("silent_error", None, str(e))
         return
     if action not in {"toggle", "togglep"}:
         await callback.answer("Xatolik.", show_alert=True)
@@ -6270,7 +6948,11 @@ async def serial_notify_callback(callback: CallbackQuery):
     await callback.answer(f"{title} uchun bildirishnomalar {status_text}.")
     if not serial:
         return
-    part_numbers, vip_parts = _serial_part_numbers_for_keyboard(serial_id)
+    serial_parts = _visible_serial_parts_for_user(
+        callback.from_user.id,
+        get_serial_parts(serial_id),
+    )
+    part_numbers = [int(item["part"]) for item in serial_parts if item.get("part") is not None]
     if not part_numbers:
         return
     likes_count, dislikes_count = get_serial_rating_counts(serial_id)
@@ -6298,7 +6980,6 @@ async def serial_notify_callback(callback: CallbackQuery):
             part_numbers,
             page=page,
             per_page=SERIAL_PARTS_PER_PAGE,
-            vip_parts=vip_parts,
             share_link=share_link,
             notify_enabled=_is_serial_notify_enabled(callback.from_user.id, serial_id),
             rating=get_serial_rating(callback.from_user.id, serial_id),

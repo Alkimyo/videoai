@@ -19,6 +19,7 @@ from app.config import (
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -174,6 +175,7 @@ def init_db() -> None:
                 can_add_serial INTEGER NOT NULL DEFAULT 1,
                 can_add_part INTEGER NOT NULL DEFAULT 1,
                 can_broadcast INTEGER NOT NULL DEFAULT 1,
+                can_message_users INTEGER NOT NULL DEFAULT 1,
                 can_view_lists INTEGER NOT NULL DEFAULT 1,
                 can_view_logs INTEGER NOT NULL DEFAULT 1,
                 can_view_stats INTEGER NOT NULL DEFAULT 1,
@@ -224,6 +226,7 @@ def init_db() -> None:
                 caption TEXT,
                 source_chat_id INTEGER,
                 source_message_id INTEGER,
+                is_vip INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT,
                 UNIQUE(serial_id, part)
             )
@@ -400,6 +403,7 @@ def init_db() -> None:
         _ensure_column(conn, "admins", "can_add_serial", "INTEGER")
         _ensure_column(conn, "admins", "can_add_part", "INTEGER")
         _ensure_column(conn, "admins", "can_broadcast", "INTEGER")
+        _ensure_column(conn, "admins", "can_message_users", "INTEGER")
         _ensure_column(conn, "admins", "can_view_lists", "INTEGER")
         _ensure_column(conn, "admins", "can_view_logs", "INTEGER")
         _ensure_column(conn, "admins", "can_view_stats", "INTEGER")
@@ -407,6 +411,7 @@ def init_db() -> None:
         _ensure_column(conn, "serials", "is_vip", "INTEGER")
         _ensure_column(conn, "serials", "banner_file_id", "TEXT")
         _ensure_column(conn, "serial_parts", "created_at", "TEXT")
+        _ensure_column(conn, "serial_parts", "is_vip", "INTEGER")
         _ensure_column(conn, "vip_users", "reminded_7d", "INTEGER")
         _fill_null_admin_perms(conn)
         _ensure_column(conn, "users", "username", "TEXT")
@@ -433,12 +438,13 @@ def add_admin(user_id: int, permissions: Optional[Dict[str, int]] = None) -> Non
                 can_add_serial,
                 can_add_part,
                 can_broadcast,
+                can_message_users,
                 can_view_lists,
                 can_view_logs,
                 can_view_stats,
                 can_backup
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
@@ -448,6 +454,7 @@ def add_admin(user_id: int, permissions: Optional[Dict[str, int]] = None) -> Non
                 int(permissions.get("can_add_serial", 1)),
                 int(permissions.get("can_add_part", 1)),
                 int(permissions.get("can_broadcast", 1)),
+                int(permissions.get("can_message_users", permissions.get("can_broadcast", 1))),
                 int(permissions.get("can_view_lists", 1)),
                 int(permissions.get("can_view_logs", 1)),
                 int(permissions.get("can_view_stats", 1)),
@@ -486,6 +493,7 @@ def get_admin_permissions(user_id: int) -> Optional[Dict[str, int]]:
             "can_add_serial": 1,
             "can_add_part": 1,
             "can_broadcast": 1,
+            "can_message_users": 1,
             "can_view_lists": 1,
             "can_view_logs": 1,
             "can_view_stats": 1,
@@ -501,6 +509,7 @@ def get_admin_permissions(user_id: int) -> Optional[Dict[str, int]]:
                 can_add_serial,
                 can_add_part,
                 can_broadcast,
+                can_message_users,
                 can_view_lists,
                 can_view_logs,
                 can_view_stats,
@@ -520,6 +529,7 @@ def get_admin_permissions(user_id: int) -> Optional[Dict[str, int]]:
             "can_add_serial": int(row["can_add_serial"] if row["can_add_serial"] is not None else 1),
             "can_add_part": int(row["can_add_part"] if row["can_add_part"] is not None else 1),
             "can_broadcast": int(row["can_broadcast"] if row["can_broadcast"] is not None else 1),
+            "can_message_users": int(row["can_message_users"] if row["can_message_users"] is not None else 1),
             "can_view_lists": int(row["can_view_lists"] if row["can_view_lists"] is not None else 1),
             "can_view_logs": int(row["can_view_logs"] if row["can_view_logs"] is not None else 1),
             "can_view_stats": int(row["can_view_stats"] if row["can_view_stats"] is not None else 1),
@@ -539,6 +549,7 @@ def set_admin_permissions(user_id: int, permissions: Dict[str, int]) -> None:
                 can_add_serial = ?,
                 can_add_part = ?,
                 can_broadcast = ?,
+                can_message_users = ?,
                 can_view_lists = ?,
                 can_view_logs = ?,
                 can_view_stats = ?,
@@ -552,6 +563,7 @@ def set_admin_permissions(user_id: int, permissions: Dict[str, int]) -> None:
                 int(permissions.get("can_add_serial", 0)),
                 int(permissions.get("can_add_part", 0)),
                 int(permissions.get("can_broadcast", 0)),
+                int(permissions.get("can_message_users", permissions.get("can_broadcast", 0))),
                 int(permissions.get("can_view_lists", 0)),
                 int(permissions.get("can_view_logs", 0)),
                 int(permissions.get("can_view_stats", 0)),
@@ -737,7 +749,6 @@ def get_serials_page(limit: int, offset: int) -> List[Dict[str, object]]:
 
 
 def get_latest_serials(limit: int, include_vip: bool) -> List[Dict[str, object]]:
-    where = "" if include_vip else "WHERE s.is_vip = 0"
     with _connect() as conn:
         cur = conn.execute(
             f"""
@@ -751,7 +762,6 @@ def get_latest_serials(limit: int, include_vip: bool) -> List[Dict[str, object]]
                 COALESCE(MAX(p.created_at), s.created_at) AS last_part_at
             FROM serials AS s
             LEFT JOIN serial_parts AS p ON p.serial_id = s.id
-            {where}
             GROUP BY s.id
             ORDER BY s.created_at DESC, s.id DESC
             LIMIT ?
@@ -764,16 +774,10 @@ def get_latest_serials(limit: int, include_vip: bool) -> List[Dict[str, object]]
 def count_serials_by_title(query: str, include_vip: bool) -> int:
     like = f"%{query}%"
     with _connect() as conn:
-        if include_vip:
-            cur = conn.execute(
-                "SELECT COUNT(1) AS cnt FROM serials WHERE title LIKE ?",
-                (like,),
-            )
-        else:
-            cur = conn.execute(
-                "SELECT COUNT(1) AS cnt FROM serials WHERE title LIKE ? AND is_vip = 0",
-                (like,),
-            )
+        cur = conn.execute(
+            "SELECT COUNT(1) AS cnt FROM serials WHERE title LIKE ?",
+            (like,),
+        )
         return int(cur.fetchone()["cnt"])
 
 
@@ -785,28 +789,16 @@ def search_serials_by_title(
 ) -> List[Dict[str, object]]:
     like = f"%{query}%"
     with _connect() as conn:
-        if include_vip:
-            cur = conn.execute(
-                """
-                SELECT id, code, title, is_vip, created_at
-                FROM serials
-                WHERE title LIKE ?
-                ORDER BY code ASC
-                LIMIT ? OFFSET ?
-                """,
-                (like, limit, offset),
-            )
-        else:
-            cur = conn.execute(
-                """
-                SELECT id, code, title, is_vip, created_at
-                FROM serials
-                WHERE title LIKE ? AND is_vip = 0
-                ORDER BY code ASC
-                LIMIT ? OFFSET ?
-                """,
-                (like, limit, offset),
-            )
+        cur = conn.execute(
+            """
+            SELECT id, code, title, is_vip, created_at
+            FROM serials
+            WHERE title LIKE ?
+            ORDER BY code ASC
+            LIMIT ? OFFSET ?
+            """,
+            (like, limit, offset),
+        )
         return [dict(row) for row in cur.fetchall()]
 
 
@@ -838,6 +830,7 @@ def add_serial_part(
     caption: str,
     source_chat_id: Optional[int] = None,
     source_message_id: Optional[int] = None,
+    is_vip: int = 0,
     created_at: Optional[str] = None,
 ) -> None:
     created_at = created_at or dt.datetime.utcnow().isoformat()
@@ -852,9 +845,10 @@ def add_serial_part(
                 caption,
                 source_chat_id,
                 source_message_id,
+                is_vip,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 serial_id,
@@ -864,6 +858,7 @@ def add_serial_part(
                 caption,
                 source_chat_id,
                 source_message_id,
+                int(bool(is_vip)),
                 created_at,
             ),
         )
@@ -945,7 +940,7 @@ def get_serial_parts(serial_id: int) -> List[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
             """
-            SELECT part, file_id, file_type, caption, source_chat_id, source_message_id, created_at
+            SELECT part, file_id, file_type, caption, source_chat_id, source_message_id, is_vip, created_at
             FROM serial_parts
             WHERE serial_id = ?
             ORDER BY part ASC, id ASC
@@ -959,7 +954,7 @@ def get_serial_part(serial_id: int, part: int) -> Optional[Dict[str, object]]:
     with _connect() as conn:
         cur = conn.execute(
             """
-            SELECT part, file_id, file_type, caption, source_chat_id, source_message_id, created_at
+            SELECT part, file_id, file_type, caption, source_chat_id, source_message_id, is_vip, created_at
             FROM serial_parts
             WHERE serial_id = ? AND part = ?
             """,
@@ -967,6 +962,15 @@ def get_serial_part(serial_id: int, part: int) -> Optional[Dict[str, object]]:
         )
         row = cur.fetchone()
         return dict(row) if row else None
+
+
+def set_serial_part_vip(serial_id: int, part: int, is_vip: int) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE serial_parts SET is_vip = ? WHERE serial_id = ? AND part = ?",
+            (1 if is_vip else 0, serial_id, part),
+        )
+        conn.commit()
 
 
 def save_serial_session(
@@ -1460,8 +1464,7 @@ def get_expired_vip_serial_parts(cutoff: str, limit: int = 200) -> List[Dict[str
                 p.source_chat_id,
                 p.source_message_id
             FROM serial_parts AS p
-            JOIN serials AS s ON s.id = p.serial_id
-            WHERE s.is_vip = 1
+            WHERE p.is_vip = 1
                 AND p.created_at IS NOT NULL
                 AND p.created_at <= ?
             ORDER BY p.created_at ASC

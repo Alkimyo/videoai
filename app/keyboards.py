@@ -128,6 +128,7 @@ def serial_parts_keyboard(
     parts: Iterable[int],
     page: int,
     per_page: int,
+    vip_parts: Optional[set[int]] = None,
     share_link: Optional[str] = None,
     part_link_prefix: Optional[str] = None,
     show_rating: bool = True,
@@ -141,12 +142,14 @@ def serial_parts_keyboard(
     start = page * per_page
     end = start + per_page
     page_parts = parts_list[start:end]
+    vip_parts = vip_parts or set()
     for part in page_parts:
+        label = f"{part} 💎" if int(part) in vip_parts else str(part)
         if part_link_prefix:
-            kb.button(text=str(part), url=f"{part_link_prefix}{part}")
+            kb.button(text=label, url=f"{part_link_prefix}{part}")
         else:
             kb.button(
-                text=str(part),
+                text=label,
                 callback_data=f"serialpart:{serial_id}:{part}",
             )
     kb.adjust(5)

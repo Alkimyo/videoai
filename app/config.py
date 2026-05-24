@@ -14,6 +14,8 @@ BACKUP_DIR = os.getenv("BACKUP_DIR") or os.path.join(
     "backups",
 )
 
+BACKUP_TZ = os.getenv("BACKUP_TZ", "Asia/Tashkent")
+
 AUTO_RESTORE_DB = os.getenv("AUTO_RESTORE_DB", "0") == "1"
 AUTO_RESTORE_ONLY_IF_NEWER = os.getenv("AUTO_RESTORE_ONLY_IF_NEWER", "1") == "1"
 
@@ -48,4 +50,10 @@ BROADCAST_BATCH_SLEEP = float(os.getenv("BROADCAST_BATCH_SLEEP", "0") or 0) or (
 )
 CACHE_CLEAN_INTERVAL = int(os.getenv("CACHE_CLEAN_INTERVAL", "0") or 0) or (
     3600 if LOW_RESOURCE_MODE else 0
+)
+
+# In-memory sessions/cache TTL for handlers (seconds).
+# Used to prevent unbounded growth of global dict/set state.
+SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "0") or 0) or (
+    3600 if LOW_RESOURCE_MODE else 21600
 )

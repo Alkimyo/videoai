@@ -16741,3 +16741,226 @@
 2026-05-16T14:48:23.291048 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=admin:users message_id=15874
 2026-05-16T14:55:03.847945 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15875 text=/usend
 2026-05-16T14:55:37.475093 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15877 text=/usend 6499839380
+2026-05-21T08:23:14.385757 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15892 text=/start
+2026-05-21T08:23:14.388722 user_start user_id=5792951787
+2026-05-21T08:23:23.623307 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:vipinfo message_id=15893
+2026-05-21T08:23:51.072337 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=vipjoin:cancel message_id=15895
+2026-05-21T08:23:52.906960 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15896 text=/admin
+2026-05-21T08:23:59.393511 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=admin:viplist message_id=15897
+2026-05-21T08:24:04.642092 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=admin:users message_id=15897
+2026-05-21T08:24:15.667553 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15899 text=/help
+2026-05-21T08:24:15.865934 admins_list user_id=5792951787
+2026-05-21T08:28:16.295646 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15901 text=/start
+2026-05-21T08:28:16.298177 user_start user_id=5792951787
+2026-05-21T08:28:20.531287 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15904 text=/usend
+2026-05-21T08:32:39.004821 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15906 text=/start
+2026-05-21T08:32:39.006777 user_start user_id=5792951787
+2026-05-21T08:32:43.030873 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15909 text=/usend
+2026-05-21T08:33:26.279361 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15911 text=/usend 6499839380 hello mittivoy
+2026-05-21T08:33:26.739268 usend_success user_id=5792951787 target=6499839380
+2026-05-21T08:34:08.613430 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15914 text=hi
+2026-05-21T08:34:38.528462 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.VIDEO message_id=15915 text=“Bu Muhabbatni tarjima qilish mumkinmi?” ❤️❤️   ❤️ 12-Final [Mobile  HD]
+2026-05-21T08:35:01.348417 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15916 text=/usend 6499839380
+2026-05-21T08:35:30.940958 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15917 text=/usend 6499839380 /start bosamiz
+2026-05-21T08:35:31.552180 usend_success user_id=5792951787 target=6499839380
+2026-05-21T08:35:38.733567 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15920 text=/start
+2026-05-21T08:35:38.743046 user_start user_id=6499839380
+2026-05-21T08:35:42.349855 user_action user_id=6499839380 chat_id=6499839380 username= data=user:serials message_id=15921
+2026-05-21T08:48:54.378229 user_action user_id=6499839380 chat_id=6499839380 username= data=user:serial:294 message_id=15921
+2026-05-21T08:48:59.146951 user_action user_id=6499839380 chat_id=6499839380 username= data=serialpart:294:18 message_id=15923
+2026-05-21T08:48:59.788228 serial_part_sent user_id=6499839380 serial_id=294 part=18
+2026-05-21T08:49:02.604873 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15925 text=12
+2026-05-21T08:49:02.605552 serial_request user_id=6499839380 query=12
+2026-05-21T08:49:05.787939 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15927 text=11
+2026-05-21T08:49:05.789957 serial_request user_id=6499839380 query=11
+2026-05-21T08:49:20.999263 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15929 text=/restoredb
+2026-05-21T08:49:29.098445 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15931 text=/restoredb
+2026-05-21T08:49:29.277930 restore_db_start user_id=6499839380
+2026-05-21T08:50:37.465129 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.DOCUMENT message_id=15933 text=Backup
+2026-05-21T08:50:44.737078 user_action user_id=6499839380 chat_id=6499839380 username= data=restoredb:confirm message_id=15934
+2026-05-21T08:50:45.063020 restore_db_success user_id=6499839380 backup=/tmp/serialbot-db-backup-20260521-085044.db
+2026-05-21T08:50:47.736783 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15935 text=12
+2026-05-21T08:50:47.737756 serial_request user_id=6499839380 query=12
+2026-05-21T08:50:50.351053 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15937 text=11
+2026-05-21T08:50:50.351820 serial_request user_id=6499839380 query=11
+2026-05-21T08:50:53.837942 user_action user_id=6499839380 chat_id=6499839380 username= data=serialpart:13:8 message_id=15938
+2026-05-21T08:50:54.325924 serial_part_sent user_id=6499839380 serial_id=13 part=8
+2026-05-21T08:50:57.465995 user_action user_id=6499839380 chat_id=6499839380 username= data=serialpart:13:9 message_id=15939
+2026-05-21T08:50:58.177584 serial_part_sent user_id=6499839380 serial_id=13 part=9
+2026-05-21T08:51:04.810686 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15941 text=/admins
+2026-05-21T08:51:12.204442 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15943 text=/deladmin
+2026-05-21T08:51:44.380471 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15945 text=/deladmin 5792951787
+2026-05-21T08:51:44.393754 admin_deleted user_id=6499839380 target_id=5792951787
+2026-05-21T08:51:49.979573 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15947 text=/admins
+2026-05-21T08:52:02.182078 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15949 text=/viplist
+2026-05-21T08:52:11.822436 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15951 text=/delvip
+2026-05-21T08:52:22.686662 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=15953 text=/delvip 5792951787
+2026-05-21T08:52:37.481249 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15955 text=11
+2026-05-21T08:52:37.918630 serial_request user_id=5792951787 query=11
+2026-05-21T08:52:41.198019 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:13:18 message_id=15956
+2026-05-21T08:52:42.132097 serial_part_sent user_id=5792951787 serial_id=13 part=18
+2026-05-21T08:52:44.578029 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:13:19 message_id=15957
+2026-05-21T08:52:45.667250 serial_part_sent user_id=5792951787 serial_id=13 part=19
+2026-05-21T08:52:48.475028 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15959 text=/vip
+2026-05-21T08:54:44.173846 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15961 text=11
+2026-05-21T08:54:44.687263 serial_request user_id=5792951787 query=11
+2026-05-21T08:54:48.537636 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:13:13 message_id=15962
+2026-05-21T08:54:49.592990 serial_part_sent user_id=5792951787 serial_id=13 part=13
+2026-05-21T08:55:34.376988 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15964 text=/admin
+2026-05-21T08:55:39.493011 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15966 text=/admin
+2026-05-21T08:55:43.420606 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15968 text=/help
+2026-05-21T08:55:43.917659 admins_list user_id=5792951787
+2026-05-21T08:55:55.928166 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15970 text=/serial
+2026-05-21T08:56:00.632281 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15972 text=/serial 11
+2026-05-21T08:56:00.632855 serial_request user_id=5792951787 query=11
+2026-05-21T08:58:53.209009 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15974 text=/start
+2026-05-21T08:58:53.211519 user_start user_id=5792951787
+2026-05-21T08:59:06.445539 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.NEW_CHAT_MEMBERS message_id=1540 text=
+2026-05-21T08:59:06.750735 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=1541 text=/start@dramalaruzbek_bot 1
+2026-05-21T08:59:06.756041 user_start user_id=1087968824
+2026-05-21T08:59:42.800948 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=1544 text=/drama 11
+2026-05-21T08:59:43.182574 serial_request user_id=1087968824 query=11
+2026-05-21T08:59:58.824765 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15977 text=/start 11_8
+2026-05-21T08:59:58.826831 user_start user_id=5792951787
+2026-05-21T09:00:01.508191 backup_scheduled user_id=- path=data/backups/serialbot-backup-20260521-090000.zip
+2026-05-21T09:00:02.273569 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:13:24 message_id=15978
+2026-05-21T09:00:03.749668 serial_part_sent user_id=5792951787 serial_id=13 part=24
+2026-05-21T09:09:34.941999 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15981 text=11
+2026-05-21T09:09:35.280076 serial_request user_id=5792951787 query=11
+2026-05-21T09:09:39.300196 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:13:23 message_id=15982
+2026-05-21T09:09:40.263924 serial_part_sent user_id=5792951787 serial_id=13 part=23
+2026-05-21T09:10:36.505748 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15984 text=/start
+2026-05-21T09:10:36.507747 user_start user_id=5792951787
+2026-05-21T09:10:37.205743 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15985 text=/vip
+2026-05-21T09:10:39.778251 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15989 text=/admin
+2026-05-21T09:10:46.965487 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15991 text=/stats
+2026-05-21T09:10:52.527114 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15993 text=/vip
+2026-05-21T09:12:02.620157 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15995 text=11
+2026-05-21T09:12:03.031995 serial_request user_id=5792951787 query=11
+2026-05-21T09:12:05.279355 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15997 text=12
+2026-05-21T09:12:05.605994 serial_request user_id=5792951787 query=12
+2026-05-21T09:12:07.287754 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=15999 text=13
+2026-05-21T09:12:07.636809 serial_request user_id=5792951787 query=13
+2026-05-21T09:12:10.635792 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:16:8 message_id=16000
+2026-05-21T09:12:11.627058 serial_part_sent user_id=5792951787 serial_id=16 part=8
+2026-05-21T09:12:15.793966 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:16:10 message_id=16000
+2026-05-21T09:12:16.764511 serial_part_sent user_id=5792951787 serial_id=16 part=10
+2026-05-21T09:16:52.716694 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16003 text=/help
+2026-05-21T09:16:52.912308 admins_list user_id=6499839380
+2026-05-21T09:17:04.580160 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16005 text=238
+2026-05-21T09:17:04.581291 serial_request user_id=6499839380 query=238
+2026-05-21T09:17:08.234748 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16007 text=268
+2026-05-21T09:17:08.235901 serial_request user_id=6499839380 query=268
+2026-05-21T09:17:30.543885 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16009 text=/vippart 268 14 on
+2026-05-21T09:17:38.966548 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16011 text=268
+2026-05-21T09:17:39.285820 serial_request user_id=5792951787 query=268
+2026-05-21T09:17:44.681886 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:534:13 message_id=16012
+2026-05-21T09:17:45.757898 serial_part_sent user_id=5792951787 serial_id=534 part=13
+2026-05-21T09:22:10.657407 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16014 text=268
+2026-05-21T09:22:11.192405 serial_request user_id=5792951787 query=268
+2026-05-21T09:22:13.733643 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16016 text=11
+2026-05-21T09:22:14.247666 serial_request user_id=5792951787 query=11
+2026-05-21T09:22:17.087735 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:13:24 message_id=16017
+2026-05-21T09:22:17.937885 serial_part_sent user_id=5792951787 serial_id=13 part=24
+2026-05-23T19:28:57.331987 user_message user_id=1087968824 chat_id=-1003473985730 chat_type=supergroup username=GroupAnonymousBot msg_type=ContentType.TEXT message_id=1554 text=Odamlar shunday krinj nomni qayerdan topadi 🦦
+2026-05-23T19:28:57.342937 user_message user_id=777000 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=1559 text=Bugun barchasi sotildi 9-qism botga yuklandi
+2026-05-23T19:29:26.712803 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16025 text=/start
+2026-05-23T19:29:26.716358 user_start user_id=5792951787
+2026-05-23T19:29:30.347769 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serials message_id=16027
+2026-05-23T19:29:34.487556 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serial:300 message_id=16027
+2026-05-23T19:37:46.755271 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:300:3 message_id=16035
+2026-05-23T19:37:48.243827 serial_part_sent user_id=5792951787 serial_id=300 part=3
+2026-05-23T19:37:50.424739 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:300:4 message_id=16035
+2026-05-23T19:37:51.755154 serial_part_sent user_id=5792951787 serial_id=300 part=4
+2026-05-23T19:37:53.952546 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:300:2 message_id=16036
+2026-05-23T19:37:55.025108 serial_part_sent user_id=5792951787 serial_id=300 part=2
+2026-05-23T19:37:56.926193 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:300:5 message_id=16037
+2026-05-23T19:37:57.949214 serial_part_sent user_id=5792951787 serial_id=300 part=5
+2026-05-23T19:59:24.544764 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16040 text=/start
+2026-05-23T19:59:24.547468 user_start user_id=5792951787
+2026-05-24T16:34:34.858425 user_message user_id=7149242218 chat_id=7149242218 chat_type=private username=Adlbkvnssss msg_type=ContentType.TEXT message_id=16043 text=/start
+2026-05-24T16:34:34.864546 user_start user_id=7149242218
+2026-05-24T16:34:34.877984 user_message user_id=7149242218 chat_id=7149242218 chat_type=private username=Adlbkvnssss msg_type=ContentType.TEXT message_id=16045 text=/start
+2026-05-24T16:34:34.879749 user_start user_id=7149242218
+2026-05-24T16:34:34.968629 user_message user_id=7149242218 chat_id=7149242218 chat_type=private username=Adlbkvnssss msg_type=ContentType.TEXT message_id=16044 text=/serial
+2026-05-24T16:34:34.994978 user_message user_id=777000 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=1563 text=Reaksiyalar 60tadan oshibdi  80tadan oshsa Sichqon seriali 15-qismni ko'ramiz
+2026-05-24T16:34:35.002861 user_message user_id=7149242218 chat_id=7149242218 chat_type=private username=Adlbkvnssss msg_type=ContentType.TEXT message_id=16048 text=Svvsb
+2026-05-24T16:34:35.014622 user_message user_id=7149242218 chat_id=7149242218 chat_type=private username=Adlbkvnssss msg_type=ContentType.TEXT message_id=16046 text=Alo
+2026-05-24T16:34:35.032944 user_message user_id=7149242218 chat_id=7149242218 chat_type=private username=Adlbkvnssss msg_type=ContentType.TEXT message_id=16047 text=Ksjdb
+2026-05-24T16:34:35.668406 bot_blocked user_id=7149242218 ensure_subscribed
+2026-05-24T16:34:35.679344 bot_blocked user_id=7149242218 ensure_subscribed
+2026-05-24T16:34:35.817911 bot_blocked user_id=7149242218 ensure_subscribed
+2026-05-24T16:34:35.912802 bot_blocked user_id=7149242218 ensure_subscribed
+2026-05-24T16:34:36.072592 bot_blocked user_id=7149242218 ensure_subscribed
+2026-05-24T16:34:47.024869 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16053 text=/start
+2026-05-24T16:34:47.028099 user_start user_id=5792951787
+2026-05-24T16:34:51.058577 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serials message_id=16054
+2026-05-24T16:34:54.620659 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serial:532 message_id=16054
+2026-05-24T16:34:59.084325 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16057 text=/stats
+2026-05-24T16:37:36.421360 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16059 text=/start
+2026-05-24T16:37:36.423947 user_start user_id=5792951787
+2026-05-24T16:37:42.388938 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:vipinfo message_id=16060
+2026-05-24T16:37:46.073999 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=vipjoin:cancel message_id=16062
+2026-05-24T16:37:49.075711 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16063 text=/admin
+2026-05-24T16:38:10.180966 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16065 text=/admin
+2026-05-24T16:38:13.987483 user_action user_id=6499839380 chat_id=6499839380 username= data=admin:admins message_id=16066
+2026-05-24T16:38:14.386193 admins_list user_id=6499839380
+2026-05-24T16:38:17.012397 user_action user_id=6499839380 chat_id=6499839380 username= data=admin:back message_id=16066
+2026-05-24T16:38:20.497005 user_action user_id=6499839380 chat_id=6499839380 username= data=admin:addadmin message_id=16066
+2026-05-24T16:38:39.285726 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16067 text=/addadmin 5792951787
+2026-05-24T16:38:39.292287 admin_add_start user_id=6499839380 target_id=5792951787
+2026-05-24T16:38:42.405598 user_action user_id=6499839380 chat_id=6499839380 username= data=perm:save message_id=16068
+2026-05-24T16:38:42.413384 admin_saved user_id=6499839380 target_id=5792951787
+2026-05-24T16:38:49.656060 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16069 text=/admin
+2026-05-24T16:38:52.981450 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=admin:serials message_id=16070
+2026-05-24T16:38:56.742281 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16071 text=11
+2026-05-24T16:38:56.744020 serial_request user_id=5792951787 query=11
+2026-05-24T16:38:58.276850 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16073 text=12
+2026-05-24T16:38:58.278483 serial_request user_id=5792951787 query=12
+2026-05-24T16:39:02.776160 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16075 text=13
+2026-05-24T16:39:02.778039 serial_request user_id=5792951787 query=13
+2026-05-24T16:39:05.107673 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:16:12 message_id=16076
+2026-05-24T16:39:05.673240 serial_part_sent user_id=5792951787 serial_id=16 part=12
+2026-05-24T16:39:14.013278 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16078 text=/deladmin 5792951787
+2026-05-24T16:39:14.026682 admin_deleted user_id=6499839380 target_id=5792951787
+2026-05-24T16:39:16.712154 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16080 text=11
+2026-05-24T16:39:17.144694 serial_request user_id=5792951787 query=11
+2026-05-24T16:39:21.912386 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:13:9 message_id=16081
+2026-05-24T16:39:23.183430 serial_part_sent user_id=5792951787 serial_id=13 part=9
+2026-05-24T16:39:32.867190 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16083 text=/vip
+2026-05-24T16:39:37.363605 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16085 text=/admin
+2026-05-24T16:40:56.663163 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16087 text=/viplist
+2026-05-24T16:44:32.813232 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16089 text=/start
+2026-05-24T16:44:32.815495 user_start user_id=5792951787
+2026-05-24T16:44:35.635875 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16092 text=11
+2026-05-24T16:44:35.978141 serial_request user_id=5792951787 query=11
+2026-05-24T16:44:39.340062 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:13:18 message_id=16093
+2026-05-24T16:44:40.630778 serial_part_sent user_id=5792951787 serial_id=13 part=18
+2026-05-24T16:44:42.807017 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:13:19 message_id=16094
+2026-05-24T16:44:43.957370 serial_part_sent user_id=5792951787 serial_id=13 part=19
+2026-05-24T16:44:46.870447 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16096 text=13
+2026-05-24T16:44:47.291308 serial_request user_id=5792951787 query=13
+2026-05-24T16:44:52.704668 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:16:10 message_id=16097
+2026-05-24T16:44:54.352362 serial_part_sent user_id=5792951787 serial_id=16 part=10
+2026-05-24T16:44:55.658528 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16099 text=/vip
+2026-05-24T16:48:05.381156 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16101 text=/help
+2026-05-24T16:48:05.576040 admins_list user_id=6499839380
+2026-05-24T16:48:18.108908 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16103 text=1
+2026-05-24T16:48:18.109867 serial_request user_id=6499839380 query=1
+2026-05-24T16:48:35.123737 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16105 text=/vippart 1 12 on
+2026-05-24T16:48:48.207333 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16107 text=1
+2026-05-24T16:48:48.641897 serial_request user_id=5792951787 query=1
+2026-05-24T16:50:19.179774 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16109 text=1
+2026-05-24T16:50:19.180511 serial_request user_id=6499839380 query=1
+2026-05-24T16:58:10.575915 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16111 text=1
+2026-05-24T16:58:11.168170 serial_request user_id=5792951787 query=1
+2026-05-24T16:58:14.266593 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:1:12 message_id=16112
+2026-05-24T16:58:23.301073 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16114 text=2
+2026-05-24T16:58:23.720704 serial_request user_id=5792951787 query=2
+2026-05-24T16:58:26.072064 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16116 text=11
+2026-05-24T16:58:26.490694 serial_request user_id=5792951787 query=11
+2026-05-24T16:58:30.613415 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:13:2 message_id=16117
+2026-05-24T16:58:38.898485 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=vipjoin:start message_id=16118
+2026-05-24T16:58:55.362382 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.PHOTO message_id=16119 text=
+2026-05-24T16:59:10.162020 user_action user_id=6499839380 chat_id=6499839380 username= data=vipreceipt:reject:5792951787 message_id=16120
+2026-05-24T17:00:01.454412 backup_scheduled user_id=- path=data/backups/serialbot-backup-20260524-170000.zip

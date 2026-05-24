@@ -5,6 +5,7 @@ import datetime as dt
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
+from aiogram.exceptions import TelegramForbiddenError
 from aiogram.types import (
     BotCommand,
     BotCommandScopeAllGroupChats,
@@ -26,6 +27,7 @@ from app.config import (
 from app.config import OWNER_ID
 from app.db import (
     auto_restore_db_from_latest_backup,
+    block_user,
     ensure_owner,
     get_admins,
     init_db,
@@ -94,6 +96,18 @@ class BlockedUserCallbackMiddleware(BaseMiddleware):
         if event and event.from_user and is_blocked_user(event.from_user.id):
             return
         return await handler(event, data)
+
+
+class TelegramForbiddenGuardMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event, data: dict):
+        try:
+            return await handler(event, data)
+        except TelegramForbiddenError:
+            user_id = getattr(getattr(event, "from_user", None), "id", None)
+            if isinstance(user_id, int) and user_id > 0:
+                block_user(user_id, dt.datetime.utcnow().isoformat())
+                _log_event("bot_blocked", user_id, "forbidden_guard")
+            return
 
 
 class OverloadGuardMiddleware(BaseMiddleware):
@@ -183,6 +197,8 @@ async def set_bot_commands(bot: Bot) -> None:
         BotCommand(command="search", description="Drama qidirish"),
         BotCommand(command="new", description="Yangi dramalar"),
         BotCommand(command="top", description="Top dramalar"),
+        BotCommand(command="settings", description="Sozlamalar"),
+        BotCommand(command="myvip", description="VIP holati"),
         BotCommand(command="drama", description="Drama yuborish (guruh)"),
     ]
     admin_commands = [
@@ -294,6 +310,8 @@ def main() -> None:
 
     bot = Bot(BOT_TOKEN)
     dp = Dispatcher()
+    dp.message.middleware(TelegramForbiddenGuardMiddleware())
+    dp.callback_query.middleware(TelegramForbiddenGuardMiddleware())
     dp.message.middleware(BlockedUserMessageMiddleware())
     dp.callback_query.middleware(BlockedUserCallbackMiddleware())
     dp.message.middleware(UserMessageLogMiddleware())
