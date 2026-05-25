@@ -5907,16 +5907,58 @@ async def send_to_user_handler(message: Message, command: CommandObject):
 
 @router.message(Command("cancel"))
 async def cancel_handler(message: Message):
-    if not is_admin(message.from_user.id):
-        await message.answer("Bekor qilindi.")
-        return
-    if message.from_user.id in ADMIN_USER_MESSAGE_SESSIONS:
-        ADMIN_USER_MESSAGE_SESSIONS.pop(message.from_user.id, None)
-        await message.answer("Bekor qilindi.")
-        return
-    if message.from_user.id in BROADCAST_TEXT_SESSIONS or message.from_user.id in BROADCAST_SESSIONS:
-        BROADCAST_TEXT_SESSIONS.discard(message.from_user.id)
-        BROADCAST_SESSIONS.pop(message.from_user.id, None)
+    user_id = message.from_user.id
+    cleared = False
+
+    if is_admin(user_id):
+        if ADMIN_USER_MESSAGE_SESSIONS.pop(user_id, None) is not None:
+            cleared = True
+        if ADMIN_ADD_SESSIONS.pop(user_id, None) is not None:
+            cleared = True
+        if IMPORT_SESSIONS.pop(user_id, None) is not None:
+            cleared = True
+        if IMPORT_TASKS.pop(user_id, None) is not None:
+            cleared = True
+        if POST_SESSIONS.pop(user_id, None) is not None:
+            cleared = True
+
+    if SERIAL_RENAME_SESSIONS.pop(user_id, None) is not None:
+        cleared = True
+
+    if user_id in BROADCAST_TEXT_SESSIONS:
+        BROADCAST_TEXT_SESSIONS.discard(user_id)
+        cleared = True
+    if BROADCAST_SESSIONS.pop(user_id, None) is not None:
+        cleared = True
+
+    if user_id in VIP_PRICE_SESSIONS:
+        VIP_PRICE_SESSIONS.discard(user_id)
+        cleared = True
+    if user_id in VIP_MESSAGE_SESSIONS:
+        VIP_MESSAGE_SESSIONS.discard(user_id)
+        cleared = True
+    if user_id in VIP_CARD_SESSIONS:
+        VIP_CARD_SESSIONS.discard(user_id)
+        cleared = True
+    if user_id in VIP_PAYMENT_SESSIONS:
+        VIP_PAYMENT_SESSIONS.discard(user_id)
+        cleared = True
+    if VIP_REJECT_SESSIONS.pop(user_id, None) is not None:
+        cleared = True
+
+    if user_id in CONTACT_ADMIN_SESSIONS:
+        CONTACT_ADMIN_SESSIONS.discard(user_id)
+        cleared = True
+
+    if user_id in USER_SEARCH_SESSIONS:
+        USER_SEARCH_SESSIONS.discard(user_id)
+        cleared = True
+    if USER_SEARCH_RESULTS.pop(user_id, None) is not None:
+        cleared = True
+    if USER_SERIALS_LIST.pop(user_id, None) is not None:
+        cleared = True
+
+    if cleared:
         await message.answer("Bekor qilindi.")
         return
     await message.answer("Bekor qilindi.")

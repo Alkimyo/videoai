@@ -49,11 +49,11 @@ BROADCAST_BATCH_SLEEP = float(os.getenv("BROADCAST_BATCH_SLEEP", "0") or 0) or (
     1.0 if LOW_RESOURCE_MODE else 0.0
 )
 CACHE_CLEAN_INTERVAL = int(os.getenv("CACHE_CLEAN_INTERVAL", "0") or 0) or (
-    3600 if LOW_RESOURCE_MODE else 0
+    900 if LOW_RESOURCE_MODE else 3600
 )
 
 # In-memory sessions/cache TTL for handlers (seconds).
 # Used to prevent unbounded growth of global dict/set state.
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "0") or 0) or (
-    3600 if LOW_RESOURCE_MODE else 21600
+    1800 if LOW_RESOURCE_MODE else 3600
 )

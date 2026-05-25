@@ -16964,3 +16964,53 @@
 2026-05-24T16:58:55.362382 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.PHOTO message_id=16119 text=
 2026-05-24T16:59:10.162020 user_action user_id=6499839380 chat_id=6499839380 username= data=vipreceipt:reject:5792951787 message_id=16120
 2026-05-24T17:00:01.454412 backup_scheduled user_id=- path=data/backups/serialbot-backup-20260524-170000.zip
+2026-05-25T06:30:22.895610 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16124 text=/vippart
+2026-05-25T06:30:22.925552 user_message user_id=777000 chat_id=-1003473985730 chat_type=supergroup username= msg_type=ContentType.TEXT message_id=1565 text=Kinok vip 30ming bo'libdi 😲 Choson tv vip 30 ming 😱 Minxo tv vip 20 ming 😉  Bizda esa hammasiniki bor lekin 20 ming yoki biznikini ham kotarish vaqti keldimi deymana 🤔
+2026-05-25T06:33:39.144719 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16126 text=/start
+2026-05-25T06:33:39.148050 user_start user_id=5792951787
+2026-05-25T06:33:43.965584 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serials message_id=16127
+2026-05-25T06:33:47.450006 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serial:531 message_id=16127
+2026-05-25T06:33:51.957019 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:531:13 message_id=16129
+2026-05-25T06:33:53.258244 serial_part_sent user_id=5792951787 serial_id=531 part=13
+2026-05-25T07:57:21.625403 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16135 text=/start
+2026-05-25T07:57:21.627427 user_start user_id=5792951787
+2026-05-25T07:57:25.304325 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serials message_id=16136
+2026-05-25T07:57:28.877346 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serial:300 message_id=16136
+2026-05-25T07:57:40.590032 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16139 text=/contact
+2026-05-25T07:57:46.968564 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16141 text=hello
+2026-05-25T07:58:01.005281 user_message user_id=6499839380 chat_id=6499839380 chat_type=private username= msg_type=ContentType.TEXT message_id=16146 text=/viplist
+2026-05-25T08:00:02.031685 backup_scheduled user_id=- path=data/backups/serialbot-backup-20260525-080000.zip
+2026-05-25T08:05:37.840843 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16149 text=/start
+2026-05-25T08:05:37.842705 user_start user_id=5792951787
+2026-05-25T08:06:01.477575 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16152 text=/help
+2026-05-25T08:06:02.283287 admins_list user_id=5792951787
+2026-05-25T08:06:08.996764 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16154 text=/myvip
+2026-05-25T08:06:13.123062 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16156 text=/vip
+2026-05-25T08:06:18.511996 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16158 text=/settings
+2026-05-25T08:06:32.984732 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16160 text=/top
+2026-05-25T08:06:43.632109 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serial:543 message_id=16161
+2026-05-25T08:06:48.926594 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:543:3 message_id=16162
+2026-05-25T08:06:49.895971 serial_part_sent user_id=5792951787 serial_id=543 part=3
+2026-05-25T08:06:54.707111 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16164 text=277
+2026-05-25T08:06:55.250744 serial_request user_id=5792951787 query=277
+2026-05-25T08:06:57.965556 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16166 text=276
+2026-05-25T08:06:58.574063 serial_request user_id=5792951787 query=276
+2026-05-25T08:08:59.678149 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16168 text=/start
+2026-05-25T08:08:59.680912 user_start user_id=5792951787
+2026-05-25T08:09:20.138875 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16171 text=/vipcard
+2026-05-25T08:09:50.534199 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16173 text=/start
+2026-05-25T08:09:50.540268 user_start user_id=5792951787
+2026-05-25T08:09:54.449955 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16176 text=/stats
+2026-05-25T08:09:58.775231 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16178 text=/new
+2026-05-25T08:10:02.182939 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serial:551 message_id=16179
+2026-05-25T08:10:06.154470 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:551:8 message_id=16180
+2026-05-25T08:10:07.230590 serial_part_sent user_id=5792951787 serial_id=551 part=8
+2026-05-25T08:10:10.875154 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serial:543 message_id=16179
+2026-05-25T08:10:14.852314 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=serialpart:543:3 message_id=16182
+2026-05-25T08:10:15.970818 serial_part_sent user_id=5792951787 serial_id=543 part=3
+2026-05-25T08:12:03.510659 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16184 text=/start
+2026-05-25T08:12:03.513168 user_start user_id=5792951787
+2026-05-25T08:12:09.928771 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16187 text=/help
+2026-05-25T08:12:11.002996 admins_list user_id=5792951787
+2026-05-25T08:12:17.230394 user_message user_id=5792951787 chat_id=5792951787 chat_type=private username=Cibeeeer msg_type=ContentType.TEXT message_id=16189 text=/top
+2026-05-25T08:12:22.919167 user_action user_id=5792951787 chat_id=5792951787 username=Cibeeeer data=user:serial:510 message_id=16190

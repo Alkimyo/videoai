@@ -245,7 +245,10 @@ async def set_bot_commands(bot: Bot) -> None:
     ]
     group_commands = [
         BotCommand(command="start", description="Botni ishga tushirish"),
+        BotCommand(command="help", description="Yordam (yordam)"),
         BotCommand(command="drama", description="Drama yuborish"),
+        BotCommand(command="new", description="Yangi dramalar"),
+        BotCommand(command="top", description="Top dramalar"),
     ]
     try:
         await bot.set_my_commands(default_commands, scope=BotCommandScopeDefault())
