@@ -49,7 +49,12 @@ BROADCAST_BATCH_SLEEP = float(os.getenv("BROADCAST_BATCH_SLEEP", "0") or 0) or (
     1.0 if LOW_RESOURCE_MODE else 0.0
 )
 CACHE_CLEAN_INTERVAL = int(os.getenv("CACHE_CLEAN_INTERVAL", "0") or 0) or (
-    900 if LOW_RESOURCE_MODE else 3600
+    300 if LOW_RESOURCE_MODE else 3600
+)
+
+# Inline keyboard auto-expire (seconds). Helps reduce stale inline buttons.
+INLINE_KEYBOARD_EXPIRE_SECONDS = int(os.getenv("INLINE_KEYBOARD_EXPIRE_SECONDS", "0") or 0) or (
+    60 if LOW_RESOURCE_MODE else 120
 )
 
 # In-memory sessions/cache TTL for handlers (seconds).

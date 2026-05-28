@@ -14,6 +14,8 @@ from collections import deque
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from aiogram.exceptions import TelegramBadRequest
+
 from aiogram import F, Router
 from aiogram.enums import ChatMemberStatus
 from aiogram.exceptions import (
@@ -50,6 +52,7 @@ from app.config import (
     OWNER_ID,
     SOURCE_CHANNEL_ID,
     VIP_REMINDER_INTERVAL,
+    INLINE_KEYBOARD_EXPIRE_SECONDS,
 )
 from app.config import BACKUP_TZ
 from app.db import (
@@ -224,8 +227,46 @@ from app.handlers_sessions import (
 )
 
 
+_INLINE_EXPIRE_TASKS: dict[tuple[int, int], asyncio.Task] = {}
+_INLINE_EXPIRE_CLEANUPS: dict[tuple[int, int], callable] = {}
 
-SERIAL_PARTS_PER_PAGE = 30
+
+def _cancel_inline_expire(chat_id: int, message_id: int) -> None:
+    key = (int(chat_id), int(message_id))
+    task = _INLINE_EXPIRE_TASKS.pop(key, None)
+    if task and not task.done():
+        task.cancel()
+    _INLINE_EXPIRE_CLEANUPS.pop(key, None)
+
+
+def _schedule_inline_expire(bot, chat_id: int, message_id: int, cleanup=None) -> None:
+    if INLINE_KEYBOARD_EXPIRE_SECONDS <= 0:
+        return
+    key = (int(chat_id), int(message_id))
+    _cancel_inline_expire(key[0], key[1])
+    if cleanup is not None:
+        _INLINE_EXPIRE_CLEANUPS[key] = cleanup
+
+    async def _expire() -> None:
+        try:
+            await asyncio.sleep(INLINE_KEYBOARD_EXPIRE_SECONDS)
+            await _safe_edit_reply_markup(bot, key[0], key[1], None)
+            cleanup_fn = _INLINE_EXPIRE_CLEANUPS.pop(key, None)
+            if cleanup_fn:
+                try:
+                    cleanup_fn()
+                except Exception:
+                    pass
+        except asyncio.CancelledError:
+            return
+        finally:
+            _INLINE_EXPIRE_TASKS.pop(key, None)
+
+    _INLINE_EXPIRE_TASKS[key] = asyncio.create_task(_expire())
+
+
+
+SERIAL_PARTS_PER_PAGE = 15
 SERIALS_PER_PAGE = 20
 USERS_PER_PAGE = 20
 ADMINS_PER_PAGE = 20
@@ -1274,10 +1315,13 @@ async def check_subs_callback(callback: CallbackQuery):
             return
         await callback.message.edit_text("Obuna tasdiqlandi. Drama kodini yuboring.")
     else:
-        await callback.message.edit_text(
-            "Hali obuna emassiz.",
-            reply_markup=subscribe_keyboard(missing),
-        )
+        try:
+            await callback.message.edit_text(
+                "Hali obuna emassiz.",
+                reply_markup=subscribe_keyboard(missing),
+            )
+        except:
+            pass
 
 
 @router.callback_query(F.data == "user:sendcode")
@@ -1546,6 +1590,11 @@ async def user_like_toggle_callback(callback: CallbackQuery):
         callback.message.message_id,
         reply_markup,
     )
+    _schedule_inline_expire(
+        callback.message.bot,
+        callback.message.chat.id,
+        callback.message.message_id,
+    )
     await callback.answer()
 
 
@@ -1598,6 +1647,11 @@ async def user_like_legacy_callback(callback: CallbackQuery):
         callback.message.message_id,
         reply_markup,
     )
+    _schedule_inline_expire(
+        callback.message.bot,
+        callback.message.chat.id,
+        callback.message.message_id,
+    )
     await callback.answer()
 
 
@@ -1628,6 +1682,13 @@ async def serial_part_callback(callback: CallbackQuery):
     if not ok:
         await callback.answer()
         return
+    _cancel_inline_expire(callback.message.chat.id, callback.message.message_id)
+    await _safe_edit_reply_markup(
+        callback.message.bot,
+        callback.message.chat.id,
+        callback.message.message_id,
+        None,
+    )
     _log_event("serial_part_sent", callback.from_user.id, f"serial_id={serial_id} part={part}")
 
 
@@ -1669,6 +1730,11 @@ async def serial_page_callback(callback: CallbackQuery):
             likes_count=likes_count,
             dislikes_count=dislikes_count,
         ),
+    )
+    _schedule_inline_expire(
+        callback.message.bot,
+        callback.message.chat.id,
+        callback.message.message_id,
     )
 
 
@@ -2160,7 +2226,7 @@ async def start_handler(message: Message, command: CommandObject):
         "O'zingizga kerakli qismni tanlab contentlardan bahramand bo'ling.\n\n"
         "Yordam uchun /help buyrug'idan foydalaning."
     )
-    await message.answer(banner, reply_markup=user_keyboard())
+    sent_menssage=await message.answer(banner, reply_markup=user_keyboard())
     if message.chat.type == "private":
         group_link = await _get_start_group_link(message.bot)
         if group_link:
@@ -2173,6 +2239,12 @@ async def start_handler(message: Message, command: CommandObject):
                 "- drama haqida ma'lumot va qismlar tugmalari chiqadi",
                 reply_markup=kb.as_markup(),
             )
+
+    await asyncio.sleep(120)
+    try:
+        await sent_message.delete()
+    except:
+        pass
 
 
 @router.message(F.new_chat_members)
@@ -2285,10 +2357,17 @@ async def top_handler(message: Message):
         title = _pretty_title_text(item.get("title") or "-")
         likes = int(item.get("likes") or 0)
         lines.append(f"{idx}. {title} ({likes})")
-    await message.answer(
+    sent_message=await message.answer(
         "\n".join(lines),
         reply_markup=user_serials_keyboard(serials, page=0, total_pages=1, sort_key="top"),
     )
+
+    await asyncio.sleep(60)
+
+    try:
+        await sent_message.delete()
+    except:
+        pass
 
 
 @router.message(Command("new"))
@@ -2308,10 +2387,18 @@ async def new_handler(message: Message):
     for idx, item in enumerate(latest, start=1):
         title = _pretty_title_text(item.get("title") or "-")
         lines.append(f"{idx}. {title}")
-    await message.answer(
+    sent_message=await message.answer(
         "\n".join(lines),
         reply_markup=user_serials_keyboard(serials, page=0, total_pages=1, sort_key="new"),
     )
+
+    await asyncio.sleep(60)
+
+    try:
+        await sent_message.delete()
+    except:
+        pass
+
 
 
 @router.message(Command("addadmin"))
@@ -4479,6 +4566,12 @@ def _serial_part_numbers_with_vip(serial: Optional[dict], parts_rows: list[dict]
 
 
 async def _show_serial_parts_for_user(message: Message, serial_id: int, user_id: int) -> bool:
+
+    try:
+        await message.delete()
+    except:
+        pass
+
     all_parts = get_serial_parts(serial_id)
     serial = get_serial_by_id(serial_id)
     if not all_parts:
@@ -4510,7 +4603,7 @@ async def _show_serial_parts_for_user(message: Message, serial_id: int, user_id:
         title = _pretty_title_text(f"💎 {serial.get('title') or '-'}")
     else:
         title = _pretty_title_text(serial.get("title") or "-") if serial else "-"
-    await message.answer(
+    sent = await message.answer(
         f"Drama nomi: {title}\nQismlar soni: {parts_count}",
         reply_markup=serial_parts_keyboard(
             serial_id,
@@ -4527,6 +4620,16 @@ async def _show_serial_parts_for_user(message: Message, serial_id: int, user_id:
             dislikes_count=dislikes_count,
         ),
     )
+    
+    if sent:
+        async def delete_later():
+            await asyncio.sleep(60)
+            try:
+                await sent.delete()
+            except:
+                pass
+
+        asyncio.create_task(delete_later())
     return True
 
 
@@ -4537,6 +4640,7 @@ async def _send_serial_part(
     part_numbers: Optional[list[int]] = None,
     user_id: Optional[int] = None,
 ) -> bool:
+
     requester_id = user_id if user_id is not None else (message.from_user.id if message.from_user else 0)
     item = get_serial_part(serial_id, part)
     if not item:
@@ -4639,6 +4743,7 @@ async def _send_serial_part(
     if sent_message:
         if part_is_vip and not _is_admin_user(message.from_user.id):
             _schedule_delete_message(message.bot, message.chat.id, sent_message.message_id)
+        _schedule_inline_expire(message.bot, message.chat.id, sent_message.message_id)
         return True
     if not sent_message:
         await message.answer("Dramani yuborib bo'lmadi.")
