@@ -215,6 +215,7 @@ async def user_vipinfo_callback(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("vipjoin:"))
 async def vip_join_callback(callback: CallbackQuery):
     parts = callback.data.split(":")
+    price = get_vip_price()
     if len(parts) != 2:
         await callback.answer("Xatolik.", show_alert=True)
         return
@@ -233,7 +234,8 @@ async def vip_join_callback(callback: CallbackQuery):
     VIP_PAYMENT_SESSIONS.add(callback.from_user.id)
     text = (
         f"To'lov uchun karta: {number}\n"
-        f"Karta egasi: {owner}\n\n"
+        f"Karta egasi: {owner}\n"
+        f"Bir oy uchun {price}\n\n"
         "To'lov qilgandan so'ng chekni shu yerga yuboring."
     )
     await callback.message.edit_text(text)
