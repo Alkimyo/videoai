@@ -154,23 +154,13 @@ def _has_perm(user_id: int, perm: str) -> bool:
 async def send_vip_required(message: Message, headline: str = "Bu bo'lim VIP.") -> None:
     custom = get_vip_message()
     price = get_vip_price()
-    if custom:
-        text = f"{headline}\n\n{custom}\n\nVIPga qo'shilish uchun pastdagi tugmani bosing."
-        await message.answer(text, reply_markup=vip_info_keyboard())
-        return
-    if price:
-        text = (
-            f"{headline}\n"
-            f"Oylik narx: {price} so'm.\n\n"
-            "VIPga qo'shilish uchun:\n"
-            "1. Pastdagi VIPga qo'shilish tugmasini bosing.\n"
-            "2. Ko'rsatilgan kartaga to'lov qiling.\n"
-            "3. Chekni shu yerga yuboring."
-        )
+    if custom and price:
+        text = f"{headline}\nOylik narx: {price} so'm\n{custom}\n\nVIPga qo'shilish uchun pastdagi tugmani bosing."
         await message.answer(text, reply_markup=vip_info_keyboard())
         return
     text = (
         f"{headline}\n\n"
+        f"Oylik narxni sorash uchun adminga yozing /contact\n\n"
         "VIPga qo'shilish uchun:\n"
         "1. Pastdagi VIPga qo'shilish tugmasini bosing.\n"
         "2. Ko'rsatilgan kartaga to'lov qiling.\n"
