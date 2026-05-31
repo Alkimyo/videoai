@@ -319,8 +319,8 @@ def main() -> None:
     dp.callback_query.middleware(BlockedUserCallbackMiddleware())
     dp.message.middleware(UserMessageLogMiddleware())
     dp.callback_query.middleware(UserCallbackLogMiddleware())
-    dp.message.middleware(OverloadGuardMiddleware(capacity=10, heavy_capacity=2))
-    dp.callback_query.middleware(OverloadGuardMiddleware(capacity=10, heavy_capacity=2))
+    dp.message.middleware(OverloadGuardMiddleware(capacity=3, heavy_capacity=1))
+    dp.callback_query.middleware(OverloadGuardMiddleware(capacity=3, heavy_capacity=1))
     dp.include_router(router)
     dp.startup.register(on_startup)
 
@@ -328,8 +328,8 @@ def main() -> None:
         dp["vip_task"] = asyncio.create_task(vip_reminder_loop(bot))
         dp["backup_task"] = asyncio.create_task(backup_schedule_loop(bot))
         dp["cache_task"] = asyncio.create_task(cache_cleanup_loop())
-        dp["reco_task"] = asyncio.create_task(daily_recommendation_loop(bot))
-        dp["reco_prepare_task"] = asyncio.create_task(
+        # dp["reco_task"] = asyncio.create_task(daily_recommendation_loop(bot))
+        # dp["reco_prepare_task"] = asyncio.create_task(
             daily_recommendation_prepare_loop(bot)
         )
 
