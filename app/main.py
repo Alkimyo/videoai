@@ -330,8 +330,7 @@ def main() -> None:
         dp["cache_task"] = asyncio.create_task(cache_cleanup_loop())
         # dp["reco_task"] = asyncio.create_task(daily_recommendation_loop(bot))
         # dp["reco_prepare_task"] = asyncio.create_task(
-            daily_recommendation_prepare_loop(bot)
-        )
+        #   daily_recommendation_prepare_loop(bot))
 
     dp.startup.register(start_reminders)
     dp.startup.register(set_bot_commands)
