@@ -184,7 +184,7 @@ def serial_parts_keyboard(
                 nav_buttons.append(
                     InlineKeyboardButton(
                         text=">",
-                        url=f"{part_link_prefix}page_{page + 1}",
+                        url=f"{part_link_prefix}",
                     )
                 )
             else:
