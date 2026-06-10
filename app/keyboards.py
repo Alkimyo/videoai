@@ -155,23 +155,48 @@ def serial_parts_keyboard(
     kb.adjust(5)
     if len(parts_list) > per_page:
         nav_buttons = []
+
         if page > 0:
-            nav_buttons.append(
-                InlineKeyboardButton(
-                    text="<",
-                    callback_data=f"serialpage:{serial_id}:{page - 1}",
+            if part_link_prefix:
+                nav_buttons.append(
+                    InlineKeyboardButton(
+                        text="<",
+                        url=f"{part_link_prefix}",
+                    )
+                    )
+            else:
+                nav_buttons.append(
+                    InlineKeyboardButton(
+                        text="<",
+                        callback_data=f"serialpage:{serial_id}:{page - 1}",
+                    )
                 )
+
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text=f"{page + 1}",
+                callback_data="noop"
             )
-        nav_buttons.append(InlineKeyboardButton(text=f"{page + 1}", callback_data="noop"))
+        )
+
         if end < len(parts_list):
-            nav_buttons.append(
-                InlineKeyboardButton(
-                    text=">",
-                    callback_data=f"serialpage:{serial_id}:{page + 1}",
+            if part_link_prefix:
+                nav_buttons.append(
+                    InlineKeyboardButton(
+                        text=">",
+                        url=f"{part_link_prefix}page_{page + 1}",
+                    )
                 )
-            )
-        if nav_buttons:
-            kb.row(*nav_buttons)
+            else:
+                nav_buttons.append(
+                    InlineKeyboardButton(
+                        text=">",
+                        callback_data=f"serialpage:{serial_id}:{page + 1}",
+                    )
+                )
+
+    if nav_buttons:
+        kb.row(*nav_buttons)
     if show_rating:
         if likes_count < 0:
             likes_count = 0
