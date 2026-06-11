@@ -153,15 +153,16 @@ def serial_parts_keyboard(
                 callback_data=f"serialpart:{serial_id}:{part}",
             )
     kb.adjust(5)
+    nav_buttons = []
     if len(parts_list) > per_page:
-        nav_buttons = []
+       
 
         if page > 0:
             if part_link_prefix:
                 nav_buttons.append(
                     InlineKeyboardButton(
                         text="<",
-                        url=f"{part_link_prefix}",
+                        url=f"{part_link_prefix}1",
                     )
                     )
             else:
@@ -184,7 +185,7 @@ def serial_parts_keyboard(
                 nav_buttons.append(
                     InlineKeyboardButton(
                         text=">",
-                        url=f"{part_link_prefix}",
+                        url=f"{part_link_prefix}1",
                     )
                 )
             else:
