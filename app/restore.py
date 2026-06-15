@@ -59,8 +59,6 @@ async def auto_restore_latest_backup(bot: Bot) -> bool:
               f"📦 Fayl: {file_name}"
               )
 
-return True
-
             return True
 
         finally:
