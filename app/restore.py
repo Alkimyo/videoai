@@ -18,8 +18,12 @@ async def auto_restore_latest_backup(bot: Bot) -> bool:
     """
 
     client = await get_userbot_client()
+    print("AUTO RESTORE START")
+    
 
-    async for msg in client.iter_messages(OWNER_ID, limit=100):
+    entity = await client.get_entity(OWNER_ID)
+
+    async for msg in client.iter_messages(entity, limit=100):
 
         if not msg.document:
             continue
