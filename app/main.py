@@ -184,21 +184,21 @@ def _home(_: web.Request) -> web.Response:
     return web.Response(text="Ishlamoqda")
 
 
-async def on_startup(*_: object) -> None:
+async def on_startup(bot: Bot) -> None:
 
     try:
-        restored = await auto_restore_latest_backup()
-
-        if restored:
-            print("✅ Latest backup restored")
-        else:
-            print("⚠️ Backup topilmadi")
-
+        await auto_restore_latest_backup(bot)
     except Exception as e:
-        print(f"❌ Auto restore error: {e}")
+        await bot.send_message(
+            OWNER_ID,
+            f"❌ Auto restore xatosi:\n{e}"
+        )
 
     init_db()
     ensure_owner()
+
+
+
 
 
 async def set_bot_commands(bot: Bot) -> None:
