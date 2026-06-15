@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import datetime as dt
 
+
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
@@ -43,6 +44,7 @@ from app.handlers import (
     daily_recommendation_loop,
     daily_recommendation_prepare_loop,
 )
+from app.restore import auto_restore_latest_backup
 
 
 def _safe_text(value: str | None, limit: int = 500) -> str:
