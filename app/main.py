@@ -183,7 +183,18 @@ def _home(_: web.Request) -> web.Response:
 
 
 async def on_startup(*_: object) -> None:
-    auto_restore_db_from_latest_backup()
+
+    try:
+        restored = await auto_restore_latest_backup()
+
+        if restored:
+            print("✅ Latest backup restored")
+        else:
+            print("⚠️ Backup topilmadi")
+
+    except Exception as e:
+        print(f"❌ Auto restore error: {e}")
+
     init_db()
     ensure_owner()
 
