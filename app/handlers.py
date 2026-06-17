@@ -502,24 +502,7 @@ def _suggest_serial_titles(user_id: int, query: str, limit: int = 5) -> list[str
 
 
 
-@router.message(Command("restoretest"))
-async def restore_test(message: Message):
 
-    if message.from_user.id != OWNER_ID:
-        return
-
-    await message.answer("Restore boshlandi...")
-
-    try:
-        result = await auto_restore_latest_backup(message.bot)
-
-        if result:
-            await message.answer("✅ Restore muvaffaqiyatli")
-        else:
-            await message.answer("❌ Backup topilmadi")
-    except Exception as e:
-        await message.answer(f"❌ Xato:\n{e}")
-        raise
 
 
 async def _bot_in_chat(bot, chat_id: int) -> bool:
@@ -2287,6 +2270,26 @@ async def bot_added_to_group_handler(message: Message):
             "Bot to'liq ishlashi uchun admin qilib qo'shing.",
         )
 
+
+@router.message(Command("restoretest"))
+async def restore_test(message: Message):
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    await message.answer("Restore boshlandi...")
+
+    try:
+        result = await auto_restore_latest_backup(message.bot)
+
+        if result:
+            await message.answer("✅ Restore muvaffaqiyatli")
+        else:
+            await message.answer("❌ Backup topilmadi")
+    except Exception as e:
+        await message.answer(f"❌ Xato:\n{e}")
+        raise
+        
 
 @router.message(Command("help"))
 async def help_handler(message: Message):
