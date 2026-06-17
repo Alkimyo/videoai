@@ -53,8 +53,11 @@ from app.config import (
     SOURCE_CHANNEL_ID,
     VIP_REMINDER_INTERVAL,
     INLINE_KEYBOARD_EXPIRE_SECONDS,
+    BACKUP_CHANNEL_ID,
 )
 from app.config import BACKUP_TZ
+from app.restore  import auto_restore_latest_backup
+
 from app.db import (
     add_admin,
     add_channel,
@@ -495,6 +498,28 @@ def _suggest_serial_titles(user_id: int, query: str, limit: int = 5) -> list[str
             if len(out) >= limit:
                 return out
     return out
+
+
+
+
+@router.message(Command("restoretest"))
+async def restore_test(message: Message):
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    await message.answer("Restore boshlandi...")
+
+    try:
+        result = await auto_restore_latest_backup(message.bot)
+
+        if result:
+            await message.answer("✅ Restore muvaffaqiyatli")
+        else:
+            await message.answer("❌ Backup topilmadi")
+    except Exception as e:
+        await message.answer(f"❌ Xato:\n{e}")
+        raise
 
 
 async def _bot_in_chat(bot, chat_id: int) -> bool:
@@ -5302,7 +5327,7 @@ async def backup_schedule_loop(bot) -> None:
             path = _build_scheduled_backup()
             if path:
                 if OWNER_ID:
-                    await bot.send_document(OWNER_ID, FSInputFile(path), caption="Backup")
+                    await bot.send_document(BACKUP_CHANNEL_ID, FSInputFile(path), caption="Backup")
                 _log_event("backup_scheduled", None, f"path={path}")
         except Exception:
             pass
