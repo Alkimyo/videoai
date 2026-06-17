@@ -184,19 +184,17 @@ def _home(_: web.Request) -> web.Response:
     return web.Response(text="Ishlamoqda")
 
 
+from aiogram import Bot
+
 async def on_startup(bot: Bot) -> None:
 
     try:
         await auto_restore_latest_backup(bot)
     except Exception as e:
-        await bot.send_message(
-            OWNER_ID,
-            f"❌ Auto restore xatosi:\n{e}"
-        )
+        print(e)
 
     init_db()
     ensure_owner()
-
 
 
 
