@@ -26,6 +26,7 @@ WEBAPP_PORT = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", "10000")))
 WEBAPP_ENABLED = os.getenv("WEBAPP_ENABLED", "1") == "1"
 
 SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID", "0") or 0)
+BACKUP_CHANNEL_ID = int(os.getenv("BACKUP_CHANNEL_ID", "0") or 0)
 
 USERBOT_API_ID = int(os.getenv("USERBOT_API_ID", "0") or 0)
 USERBOT_API_HASH = os.getenv("USERBOT_API_HASH", "").strip()
