@@ -5218,7 +5218,8 @@ async def _send_backup(message: Message) -> None:
         await message.answer("Backup uchun fayl topilmadi.")
         return
     try:
-        await bot.send_document(BACKUP_CHANNEL_ID, FSInputFile(path), caption="Backup")
+        await message.bot.send_document(BACKUP_CHANNEL_ID, FSInputFile(path), caption="Backup")
+        
         await message.answer("Backup fayli BACKUP kanaliga yuborildi.")
     finally:
         try:
