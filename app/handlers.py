@@ -5213,8 +5213,8 @@ async def settings_handler(message: Message):
 
 
 async def _send_backup(message: Message) -> None:
-    backup_path = _build_backup_zip()
-    if not backup_path:
+    path = _build_backup_zip()
+    if not path:
         await message.answer("Backup uchun fayl topilmadi.")
         return
     try:
@@ -5223,7 +5223,7 @@ async def _send_backup(message: Message) -> None:
         await message.answer("Backup fayli BACKUP kanaliga yuborildi.")
     finally:
         try:
-            os.remove(backup_path)
+            os.remove(path)
         except Exception:
             pass
 
