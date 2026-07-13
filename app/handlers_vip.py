@@ -129,7 +129,7 @@ async def send_vip_info(message: Message, user_id: int) -> None:
             "✅ Doimiy texnik qo'llab-quvvatlash.\n"
             "✅ Yangi qo'shilayotgan dramalardan birinchi bo'lib foydalanish.\n\n"
             "📌 VIP obuna olish uchun:\n\n"
-            "1️⃣ "VIPga qo'shilish" tugmasini bosing.\n"
+            "1️⃣ VIPga qo'shilish tugmasini bosing.\n"
             "2️⃣ Ko'rsatilgan karta raqamiga to'lovni amalga oshiring.\n"
             "3️⃣ To'lov chekini yuboring.\n"
             "4️⃣ Admin VIP obunangizni tez orada faollashtiradi. ✅"
