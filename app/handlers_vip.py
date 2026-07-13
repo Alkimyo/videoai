@@ -119,7 +119,7 @@ async def send_vip_info(message: Message, user_id: int) -> None:
     if not info:
         text = "Sizda VIP yo'q."
         if price:
-            text += f"\nOylik narx: {price} so'm."
+            text += f"\n🥉 1 OYLIK VIP — {price} so'm\n🥈 3 OYLIK VIP — {3*price-11000} so'm\n👑 6 OYLIK VIP ⭐ ENG FOYDALI TARIF — {6*price-41000 "
         text += (
             "\n\nVIPga qo'shilish uchun:\n"
             "1. VIPga qo'shilishni bosing.\n"
@@ -155,12 +155,12 @@ async def send_vip_required(message: Message, headline: str = "Bu bo'lim VIP.") 
     custom = get_vip_message()
     price = get_vip_price()
     if custom and price:
-        text = f"{headline}\nOylik narx: {price} so'm\n{custom}\n\nVIPga qo'shilish uchun pastdagi tugmani bosing."
+        text = f"{headline}\n\n🥉 1 OYLIK VIP — {price} so'm\n🥈 3 OYLIK VIP — {3*price-11000} so'm\n👑 6 OYLIK VIP ⭐ ENG FOYDALI TARIF — {6*price-41000}\n\n{custom}\n\nVIPga qo'shilish uchun pastdagi tugmani bosing."
         await message.answer(text, reply_markup=vip_info_keyboard())
         return
     text = (
         f"{headline}\n\n"
-        f"Oylik narxni sorash uchun adminga yozing /contact\n\n"
+        f"Qo'shimcha ma'lumot uchun adminga yozing /contact\n\n"
         "VIPga qo'shilish uchun:\n"
         "1. Pastdagi VIPga qo'shilish tugmasini bosing.\n"
         "2. Ko'rsatilgan kartaga to'lov qiling.\n"
@@ -225,7 +225,7 @@ async def vip_join_callback(callback: CallbackQuery):
     text = (
         f"To'lov uchun karta: {number}\n"
         f"Karta egasi: {owner}\n"
-        f"Bir oy uchun {price}\n\n"
+        f"\n🥉 1 OYLIK VIP — {price} so'm\n🥈 3 OYLIK VIP — {3*price-11000} so'm\n👑 6 OYLIK VIP ⭐ ENG FOYDALI TARIF — {6*price-41000\n\n"
         "To'lov qilgandan so'ng chekni shu yerga yuboring."
     )
     await callback.message.edit_text(text)
