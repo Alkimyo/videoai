@@ -117,13 +117,22 @@ async def send_vip_info(message: Message, user_id: int) -> None:
     info = get_vip_user(user_id)
     price = get_vip_price()
     if not info:
-        text = "Sizda VIP yo'q."
+        text = "❌ Sizda faol VIP obuna mavjud emas."
         if price:
-            text += f"\n🥉 1 OYLIK VIP — {price} so'm\n🥈 3 OYLIK VIP — {3*price-11000} so'm\n👑 6 OYLIK VIP ⭐ ENG FOYDALI TARIF — {6*price-41000}"
+            text += f"\n\n💎 VIP TARIFLAR\n\n🥉 1 OYLIK VIP — {price} so'm\n\n🥈 3 OYLIK VIP — {3*price-11000} so'm\n💰 11 000 so'm tejaysiz.\n\n👑 6 OYLIK VIP — {6*price-41000} ⭐\n🔥 Eng foydali tarif!\n💰 41 000 so'm tejaysiz.\n\n"
         text += (
-            "\n\nVIPga qo'shilish uchun:\n"
-            "1. VIPga qo'shilishni bosing.\n"
-            "2. Ko'rsatilgan kartaga to'lov qiling va chekni yuboring."
+            
+            "💎 VIP afzalliklari:\n\n"
+            "✅ Yangi dramalarni hammadan oldin tomosha qilish.\n"
+            "✅ Eksklyuziv VIP dramalarga kirish.\n"
+            "✅ Bot tezroq va navbatsiz ishlaydi.\n"
+            "✅ Doimiy texnik qo'llab-quvvatlash.\n"
+            "✅ Yangi qo'shilayotgan dramalardan birinchi bo'lib foydalanish.\n\n"
+            "📌 VIP obuna olish uchun:\n\n"
+            "1️⃣ "VIPga qo'shilish" tugmasini bosing.\n"
+            "2️⃣ Ko'rsatilgan karta raqamiga to'lovni amalga oshiring.\n"
+            "3️⃣ To'lov chekini yuboring.\n"
+            "4️⃣ Admin VIP obunangizni tez orada faollashtiradi. ✅"
         )
         await message.answer(text, reply_markup=vip_info_keyboard())
         return
@@ -155,7 +164,7 @@ async def send_vip_required(message: Message, headline: str = "Bu bo'lim VIP.") 
     custom = get_vip_message()
     price = get_vip_price()
     if custom and price:
-        text = f"{headline}\n\n🥉 1 OYLIK VIP — {price} so'm\n🥈 3 OYLIK VIP — {3*price-11000} so'm\n👑 6 OYLIK VIP ⭐ ENG FOYDALI TARIF — {6*price-41000}\n\n{custom}\n\nVIPga qo'shilish uchun pastdagi tugmani bosing."
+        text = f"{headline}\n\n💎 VIP TARIFLAR\n\n🥉 1 OYLIK VIP — {price} so'm\n\n🥈 3 OYLIK VIP — {3*price-11000} so'm\n💰 11 000 so'm tejaysiz.\n\n👑 6 OYLIK VIP — {6*price-41000} ⭐\n🔥 Eng foydali tarif!\n💰 41 000 so'm tejaysiz.\n\n{custom}\n\nVIPga qo'shilish uchun pastdagi tugmani bosing."
         await message.answer(text, reply_markup=vip_info_keyboard())
         return
     text = (
@@ -225,7 +234,13 @@ async def vip_join_callback(callback: CallbackQuery):
     text = (
         f"To'lov uchun karta: {number}\n"
         f"Karta egasi: {owner}\n"
-        f"\n🥉 1 OYLIK VIP — {price} so'm\n🥈 3 OYLIK VIP — {3*price-11000} so'm\n👑 6 OYLIK VIP ⭐ ENG FOYDALI TARIF — {6*price-41000} so'm\n\n"
+        f"\n💎 VIP TARIFLAR\n\n"
+        f"🥉 1 OYLIK VIP — {price} so'm\n\n"
+        f"🥈 3 OYLIK VIP — {3*price-11000} so'm\n"
+        f"💰 11 000 so'm tejaysiz.\n\n"
+        f"👑 6 OYLIK VIP — {6*price-41000} ⭐\n"
+        f"🔥 Eng foydali tarif!\n"
+        f"💰 41 000 so'm tejaysiz.\n\n"
         "To'lov qilgandan so'ng chekni shu yerga yuboring."
     )
     await callback.message.edit_text(text)
