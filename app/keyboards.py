@@ -546,8 +546,8 @@ def post_channel_keyboard(channels: Iterable[dict]):
 def vip_duration_keyboard(user_id: int):
     kb = InlineKeyboardBuilder()
     kb.button(text="1 oy", callback_data=f"vip:add:{user_id}:30")
-    kb.button(text="2 oy", callback_data=f"vip:add:{user_id}:60")
     kb.button(text="3 oy", callback_data=f"vip:add:{user_id}:90")
+    kb.button(text="6 oy", callback_data=f"vip:add:{user_id}:180")
     kb.button(text="Bekor", callback_data="vip:cancel")
     kb.adjust(2)
     return kb.as_markup()
