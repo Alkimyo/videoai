@@ -246,6 +246,21 @@ async def vip_join_callback(callback: CallbackQuery):
     await callback.message.edit_text(text)
 
 
+@router.callback_query(F.data == "vip:dramas")
+async def vip_dramas_callback(callback: CallbackQuery):
+    try:
+        await callback.bot.copy_message(
+            chat_id=callback.from_user.id,
+            from_chat_id=-1003861759494,
+            message_id=8712,
+        )
+
+        await callback.answer("✅ VIP dramalar ro'yxati yuborildi.")
+
+    except Exception as e:
+        await callback.answer("❌ Xabarni yuborib bo'lmadi.", show_alert=True)
+        print(e)
+
 @router.message(Command("addvip"))
 async def add_vip_handler(message: Message, command: CommandObject):
     if not _has_perm(message.from_user.id, "can_manage_vip"):
