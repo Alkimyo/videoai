@@ -578,9 +578,22 @@ def vip_price_keyboard():
 
 def vip_info_keyboard():
     kb = InlineKeyboardBuilder()
-    kb.button(text="VIPga qo'shilish", callback_data="vipjoin:start")
-    kb.button(text="Bekor", callback_data="vipjoin:cancel")
-    kb.adjust(2)
+    kb.button(
+        text="💎 VIPga qo'shilish",
+        callback_data="vipjoin:start"
+    )
+
+    kb.button(
+        text="🎬 VIP dramalari",
+        callback_data="vip:dramas"
+    )
+
+    kb.button(
+        text="❌ Bekor qilish",
+        callback_data="vipjoin:cancel"
+    )
+
+    kb.adjust(1)
     return kb.as_markup()
 
 
