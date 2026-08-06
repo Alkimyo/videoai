@@ -255,8 +255,6 @@ async def vip_dramas_callback(callback: CallbackQuery):
             message_id=8712,
         )
 
-        await callback.answer("✅ VIP dramalar ro'yxati yuborildi.")
-
     except Exception as e:
         await callback.answer("❌ Xabarni yuborib bo'lmadi.", show_alert=True)
         print(e)
